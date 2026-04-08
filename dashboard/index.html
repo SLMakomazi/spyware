@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Dashboard - Spyware Demo</title>
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header>
+            <h1>Analytics Dashboard</h1>
+            <p>Real-time data collection from portfolio visitors</p>
+            <div class="status-indicator">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Connected</span>
+            </div>
+        </header>
+
+        <main>
+            <div class="stats-overview">
+                <div class="stat-card">
+                    <h3>Total Visitors</h3>
+                    <div class="stat-number" id="totalVisitors">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Active Sessions</h3>
+                    <div class="stat-number" id="activeSessions">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Permission Granted</h3>
+                    <div class="stat-number" id="permissionGranted">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Data Points Collected</h3>
+                    <div class="stat-number" id="dataPoints">0</div>
+                </div>
+            </div>
+
+            <div class="dashboard-grid">
+                <div class="data-section">
+                    <h2>Recent Visitors</h2>
+                    <div id="visitorsList" class="visitor-cards">
+                        <p class="no-data">No visitor data yet</p>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h2>Live Feed</h2>
+                    <div id="liveFeed" class="feed-container">
+                        <p class="no-data">Waiting for data...</p>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h2>Captured Images</h2>
+                    <div id="capturedImages" class="image-gallery">
+                        <p class="no-data">No images captured yet</p>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h2>Device Analytics</h2>
+                    <div class="device-stats">
+                        <canvas id="deviceChart"></canvas>
+                        <div id="deviceBreakdown"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <div class="controls">
+                <button id="clearData" class="btn-danger">Clear All Data</button>
+                <button id="exportData" class="btn-primary">Export Data</button>
+                <button id="toggleLive" class="btn-secondary">Pause Live Updates</button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Image Viewer Modal -->
+    <div id="imageModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <img id="modalImage" src="" alt="Captured Image">
+            <div class="image-info">
+                <h3 id="imageTitle"></h3>
+                <p id="imageTimestamp"></p>
+                <p id="imageDeviceInfo"></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>
