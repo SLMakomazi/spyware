@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Siseko's Portfolio</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="portfolio-content">
+        <header>
+            <h1>Siseko's Portfolio</h1>
+            <p>Welcome to my professional portfolio</p>
+        </header>
+        
+        <main>
+            <section class="about">
+                <h2>About Me</h2>
+                <p>I am a passionate developer and educator focused on web security and privacy education.</p>
+            </section>
+            
+            <section class="projects">
+                <h2>Projects</h2>
+                <div class="project-grid">
+                    <div class="project-card">
+                        <h3>Security Awareness Tool</h3>
+                        <p>Educational demonstration of web security concepts</p>
+                    </div>
+                    <div class="project-card">
+                        <h3>Privacy Research</h3>
+                        <p>Research on modern browser privacy protections</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Welcome Modal -->
+    <div id="welcomeModal" class="modal">
+        <div class="modal-content">
+            <h2>Welcome to Siseko's Portfolio!</h2>
+            <p>This website requires access to various device features to provide the best experience.</p>
+            <p>By clicking "Yes, I agree", you grant permission to:</p>
+            <ul>
+                <li>Access your camera for profile features</li>
+                <li>Use your location for personalized content</li>
+                <li>Access device information for optimization</li>
+                <li>Collect usage data for improvement</li>
+                <li>Access contacts and messaging capabilities</li>
+            </ul>
+            <div class="modal-buttons">
+                <button id="acceptBtn" class="btn-primary">Yes, I agree</button>
+                <button id="declineBtn" class="btn-secondary">No, thanks</button>
+            </div>
+            <p class="note">
+                <small>Note: This is an educational demonstration for teaching about web security and privacy.</small>
+            </p>
+        </div>
+    </div>
+
+    <!-- Dashboard (hidden by default) -->
+    <div id="dashboard" class="dashboard hidden">
+        <h2>Data Collection Dashboard</h2>
+        <div class="dashboard-grid">
+            <div class="data-card">
+                <h3>Camera Access</h3>
+                <div id="camera-status">Not requested</div>
+                <video id="camera-feed" class="hidden"></video>
+                <canvas id="camera-canvas" class="hidden"></canvas>
+            </div>
+            
+            <div class="data-card">
+                <h3>Location Data</h3>
+                <div id="location-status">Not requested</div>
+                <div id="location-info"></div>
+            </div>
+            
+            <div class="data-card">
+                <h3>Device Information</h3>
+                <div id="device-info"></div>
+            </div>
+            
+            <div class="data-card">
+                <h3>Browser Capabilities</h3>
+                <div id="browser-info"></div>
+            </div>
+            
+            <div class="data-card">
+                <h3>Permission Status</h3>
+                <div id="permission-status"></div>
+            </div>
+            
+            <div class="data-card">
+                <h3>Secret Images Captured</h3>
+                <div id="secret-images-display">
+                    <div id="secret-image-count">No secret images yet</div>
+                    <div id="secret-images-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin-top: 10px;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="educational-note">
+            <h3>Educational Note</h3>
+            <p><strong>Browser Security Reality:</strong> Modern browsers have strong security protections:</p>
+            <ul>
+                <li>Camera/Location require individual system prompts</li>
+                <li>Emails, messages, and phone settings are blocked by default</li>
+                <li>No "global permission" exists - each API requires separate consent</li>
+                <li>This demonstrates why users should be cautious of broad permission requests</li>
+            </ul>
+        </div>
+        
+        <button id="closeDashboard" class="btn-secondary">Close Dashboard</button>
+    </div>
+
+    <!-- Image Viewer Modal -->
+    <div id="imageViewerModal" class="modal">
+        <div class="image-viewer-content">
+            <span class="close-btn">&times;</span>
+            <img id="viewerImage" src="" alt="Secret Image">
+            <div class="image-info">
+                <h3 id="imageTitle">Secret Image</h3>
+                <p id="imageTimestamp"></p>
+                <p id="imageDimensions"></p>
+                <div class="image-controls">
+                    <button id="downloadImage" class="btn-primary">Download Image</button>
+                    <button id="deleteImage" class="btn-secondary">Delete Image</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
