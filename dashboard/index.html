@@ -28,12 +28,28 @@
                     <div class="stat-number" id="activeSessions">0</div>
                 </div>
                 <div class="stat-card">
-                    <h3>Permission Granted</h3>
-                    <div class="stat-number" id="permissionGranted">0</div>
+                    <h3>Camera Access</h3>
+                    <div class="stat-number" id="cameraGranted">0</div>
                 </div>
                 <div class="stat-card">
-                    <h3>Data Points Collected</h3>
+                    <h3>Location Access</h3>
+                    <div class="stat-number" id="locationGranted">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Images</h3>
+                    <div class="stat-number" id="totalImages">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Avg Session Time</h3>
+                    <div class="stat-number" id="avgSessionTime">0s</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Data Points</h3>
                     <div class="stat-number" id="dataPoints">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Storage Used</h3>
+                    <div class="stat-number" id="storageUsed">0KB</div>
                 </div>
             </div>
 
@@ -66,6 +82,175 @@
                         <div id="deviceBreakdown"></div>
                     </div>
                 </div>
+
+                <div class="data-section">
+                    <h2>Camera Analytics</h2>
+                    <div id="cameraAnalytics">
+                        <div class="camera-stats">
+                            <div class="camera-stat">
+                                <span class="stat-label">Camera Status:</span>
+                                <span id="cameraStatus">Unknown</span>
+                            </div>
+                            <div class="camera-stat">
+                                <span class="stat-label">Resolution:</span>
+                                <span id="cameraResolution">Unknown</span>
+                            </div>
+                            <div class="camera-stat">
+                                <span class="stat-label">Frame Rate:</span>
+                                <span id="cameraFrameRate">Unknown</span>
+                            </div>
+                            <div class="camera-stat">
+                                <span class="stat-label">Capture Rate:</span>
+                                <span id="captureRate">0/min</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h2>Location Analytics</h2>
+                    <div id="locationAnalytics">
+                        <div class="location-stats">
+                            <div class="location-stat">
+                                <span class="stat-label">Location Status:</span>
+                                <span id="locationStatus">Unknown</span>
+                            </div>
+                            <div class="location-stat">
+                                <span class="stat-label">Average Accuracy:</span>
+                                <span id="avgAccuracy">Unknown</span>
+                            </div>
+                            <div class="location-stat">
+                                <span class="stat-label">Unique Locations:</span>
+                                <span id="uniqueLocations">0</span>
+                            </div>
+                            <div class="location-stat">
+                                <span class="stat-label">Location Source:</span>
+                                <span id="locationSource">Unknown</span>
+                            </div>
+                        </div>
+                        <div id="locationMap" class="location-map">
+                            <p class="no-data">Location data not available</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h2>Permission Analytics</h2>
+                    <div id="permissionAnalytics">
+                        <div class="permission-breakdown">
+                            <div class="permission-item">
+                                <span class="permission-name">Camera</span>
+                                <div class="permission-bar">
+                                    <div class="permission-fill" id="cameraPermissionBar"></div>
+                                </div>
+                                <span class="permission-count" id="cameraPermissionCount">0/0</span>
+                            </div>
+                            <div class="permission-item">
+                                <span class="permission-name">Location</span>
+                                <div class="permission-bar">
+                                    <div class="permission-fill" id="locationPermissionBar"></div>
+                                </div>
+                                <span class="permission-count" id="locationPermissionCount">0/0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h2>Session Analytics</h2>
+                    <div id="sessionAnalytics">
+                        <div class="session-stats">
+                            <div class="session-stat">
+                                <span class="stat-label">Total Session Time:</span>
+                                <span id="totalSessionTime">0s</span>
+                            </div>
+                            <div class="session-stat">
+                                <span class="stat-label">Longest Session:</span>
+                                <span id="longestSession">0s</span>
+                            </div>
+                            <div class="session-stat">
+                                <span class="stat-label">Shortest Session:</span>
+                                <span id="shortestSession">0s</span>
+                            </div>
+                            <div class="session-stat">
+                                <span class="stat-label">Active Now:</span>
+                                <span id="activeNow">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h2>Engagement Metrics</h2>
+                    <div id="engagementAnalytics">
+                        <div class="engagement-stats">
+                            <div class="engagement-stat">
+                                <span class="stat-label">Page Views:</span>
+                                <span id="pageViews">0</span>
+                            </div>
+                            <div class="engagement-stat">
+                                <span class="stat-label">Tab Switches:</span>
+                                <span id="tabSwitches">0</span>
+                            </div>
+                            <div class="engagement-stat">
+                                <span class="stat-label">User Interactions:</span>
+                                <span id="userInteractions">0</span>
+                            </div>
+                            <div class="engagement-stat">
+                                <span class="stat-label">Data Points/Visitor:</span>
+                                <span id="dataPointsPerVisitor">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <h2>🔐 Credential Analytics (Educational)</h2>
+                    <div id="credentialAnalytics">
+                        <div class="credential-stats">
+                            <div class="credential-stat">
+                                <span class="stat-label">Passwords Captured:</span>
+                                <span id="passwordsCaptured">0</span>
+                            </div>
+                            <div class="credential-stat">
+                                <span class="stat-label">Form Submissions:</span>
+                                <span id="formSubmissions">0</span>
+                            </div>
+                            <div class="credential-stat">
+                                <span class="stat-label">Autofill Detected:</span>
+                                <span id="autofillDetected">0</span>
+                            </div>
+                            <div class="credential-stat">
+                                <span class="stat-label">Storage Items Found:</span>
+                                <span id="storageItemsFound">0</span>
+                            </div>
+                            <div class="credential-stat">
+                                <span class="stat-label">Cookies Extracted:</span>
+                                <span id="cookiesExtracted">0</span>
+                            </div>
+                            <div class="credential-stat">
+                                <span class="stat-label">Keystrokes Logged:</span>
+                                <span id="keystrokesLogged">0</span>
+                            </div>
+                            <div class="credential-stat">
+                                <span class="stat-label">Browser History:</span>
+                                <span id="browserHistoryEntries">0</span>
+                            </div>
+                        </div>
+                        <div class="credential-breakdown">
+                            <h4>Recent Credential Activity</h4>
+                            <div id="credentialActivity" class="credential-activity">
+                                <p class="no-data">No credential activity yet</p>
+                            </div>
+                        </div>
+                        <div class="browser-history-section">
+                            <h4>🌐 Browser History</h4>
+                            <div id="browserHistoryList" class="browser-history">
+                                <p class="no-data">No browser history captured yet</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
 
@@ -73,6 +258,7 @@
             <div class="controls">
                 <button id="clearData" class="btn-danger">Clear All Data</button>
                 <button id="exportData" class="btn-primary">Export Data</button>
+                <button id="exportCredentialsExcel" class="btn-success">Export Credentials (Excel)</button>
                 <button id="toggleLive" class="btn-secondary">Pause Live Updates</button>
             </div>
         </footer>

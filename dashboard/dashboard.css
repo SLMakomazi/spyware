@@ -267,6 +267,16 @@ footer {
     transform: translateY(-2px);
 }
 
+.btn-success {
+    background: #27ae60;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #229954;
+    transform: translateY(-2px);
+}
+
 .btn-secondary {
     background: #95a5a6;
     color: white;
